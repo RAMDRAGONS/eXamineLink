@@ -2,11 +2,11 @@
 #include <bit>
 #include <map>
 #include <set>
-#include <unordered_map>
 
 #include "core/crc32.hpp"
 #include "formats/codecs.hpp"
 #include "formats/string_pool.hpp"
+#include "formats/xlink_words.hpp"
 #include "model/xlink_schema.hpp"
 
 // Layout of XLink resource versions 27 to 36, as read by
@@ -129,25 +129,11 @@ namespace xl::xlink_modern {
         };
 
         std::unique_ptr<Node> ModernReader::make_param(u32 raw, int def) {
-            const auto& S = schemas();
-            auto p = std::make_unique<Node>(&S.param);
-            const u32 rt = raw >> 24, v = raw & 0xFFFFFF;
+            auto p = std::make_unique<Node>(&schemas().param);
             p->set_i(param::Def, def);
-            p->set_i(param::RefType, rt);
-            p->set_i(param::DirectHint, -1);
-            if (rt == RT_String) {
-                p->set_s(param::Value, name(v));
-            } else if (is_direct_table_ref(rt)) {
-                if (v >= m_direct.size())
-                    throw Error(
-                        "parameter names direct value " + std::to_string(v) + " of " + std::to_string(m_direct.size()));
-                p->set_i(param::Value, m_direct[v]);
-                p->set_i(param::DirectHint, v);
-            } else {
-                p->set_i(param::Value, v);
-                if (rt == RT_ArrangeGroup)
-                    m_arrange_params.push_back(p.get());
-            }
+            read_param_word(*p, raw, m_direct, [this](u64 off) { return name(off); });
+            if (p->i(param::RefType) == RT_ArrangeGroup)
+                m_arrange_params.push_back(p.get());
             return p;
         }
 
@@ -639,14 +625,8 @@ namespace xl::xlink_modern {
                 , file(*doc.root)
                 , w(doc.endian)
                 , g { geometry(version, xlink_system(doc.format)) }
-                , m_names(file.s(file::NameTablePool)) {
-                const std::string& dp = file.s(file::DirectValuePool);
-                Reader pr(Bytes(reinterpret_cast<const u8*>(dp.data()), dp.size()), doc.endian);
-                for (std::size_t k = 0; k + 4 <= dp.size(); k += 4) {
-                    m_direct.push_back(pr.u32_at(k));
-                    m_direct_index.emplace(m_direct.back(), static_cast<u32>(m_direct.size() - 1));
-                }
-            }
+                , m_names(file.s(file::NameTablePool))
+                , m_direct(file.s(file::DirectValuePool), doc.endian) { }
 
             Buffer run();
 
@@ -657,8 +637,7 @@ namespace xl::xlink_modern {
             void wpos(s64 v) {
                 g.wide ? w.w64(v < 0 ? None32 : static_cast<u64>(v)) : w.w32(v < 0 ? None32 : static_cast<u32>(v));
             }
-            u32 param_word(const Node& p, s64 arrange_base);
-            u32 direct_index(u32 value, s64 hint);
+            u32 word(const Node& p) { return param_word(p, m_names, m_direct, m_arrange_pos); }
             void write_pdt();
             void write_user(const Node& u, std::size_t at);
 
@@ -667,8 +646,7 @@ namespace xl::xlink_modern {
             Writer w;
             Geometry g;
             StringPool m_names;
-            std::vector<u32> m_direct;
-            std::unordered_multimap<u32, u32> m_direct_index;
+            DirectValues m_direct;
             std::vector<u64> m_asset_set_pos, m_trigger_set_pos, m_condition_pos, m_arrange_pos;
             u64 m_asset_sets_end = 0, m_trigger_sets_end = 0, m_conditions_end = 0;
             // Position of entry `i` of a table, its end for RefTableEnd, or -1.
@@ -679,38 +657,6 @@ namespace xl::xlink_modern {
             }
             std::vector<int> sorted_calls(const Node& u) const;
         };
-
-        u32 ModernWriter::direct_index(u32 value, s64 hint) {
-            if (hint >= 0 && static_cast<u64>(hint) < m_direct.size() && m_direct[hint] == value)
-                return static_cast<u32>(hint);
-            // The earliest matching entry, as a fresh build would choose.
-            const auto range = m_direct_index.equal_range(value);
-            u32 best = None32;
-            for (auto it = range.first; it != range.second; ++it)
-                best = std::min(best, it->second);
-            if (best != None32)
-                return best;
-            m_direct.push_back(value);
-            m_direct_index.emplace(value, static_cast<u32>(m_direct.size() - 1));
-            return static_cast<u32>(m_direct.size() - 1);
-        }
-
-        u32 ModernWriter::param_word(const Node& p, s64 arrange_base) {
-            (void)arrange_base;
-            const s64 rt = p.i(param::RefType);
-            u64 v;
-            if (rt == RT_String)
-                v = m_names.offset(p.s(param::Value));
-            else if (is_direct_table_ref(rt))
-                v = direct_index(static_cast<u32>(p.i(param::Value)), p.i(param::DirectHint));
-            else if (rt == RT_ArrangeGroup)
-                v = m_arrange_pos.at(static_cast<std::size_t>(p.i(param::Value)));
-            else
-                v = static_cast<u64>(p.i(param::Value));
-            if (v > 0xFFFFFF)
-                throw Error("parameter value " + hex(v) + " does not fit the 24 bits a reference holds");
-            return static_cast<u32>(rt) << 24 | static_cast<u32>(v);
-        }
 
         void ModernWriter::write_pdt() {
             const std::size_t pdt = w.pos();
@@ -832,7 +778,7 @@ namespace xl::xlink_modern {
                         break;
                     }
                 if (found) {
-                    w.w32(param_word(*found, 0));
+                    w.w32(word(*found));
                     continue;
                 }
                 Node fallback(&schemas().param);
@@ -849,7 +795,7 @@ namespace xl::xlink_modern {
                         type == PT_Float ? f32_bits(static_cast<f32>(def.f64v(pdef::Default)))
                                          : static_cast<u32>(def.i(pdef::Default)));
                 }
-                w.w32(param_word(fallback, 0));
+                w.w32(word(fallback));
             }
 
             for (const int k : sorted_calls(u))
@@ -1101,7 +1047,7 @@ namespace xl::xlink_modern {
                 }
                 wide_mask ? w.w64(mask) : w.w32(static_cast<u32>(mask));
                 for (const Node* p : params)
-                    w.w32(param_word(*p, 0));
+                    w.w32(word(*p));
             };
             for (const auto& set : file.list(file::AssetParamSets))
                 write_set(*set, true);
@@ -1130,7 +1076,7 @@ namespace xl::xlink_modern {
                 w = std::move(saved);
             }
 
-            for (const u32 v : m_direct)
+            for (const u32 v : m_direct.values())
                 w.w32(v);
             for (const auto& rnd : file.list(file::Randoms)) {
                 w.w32(static_cast<u32>(rnd->i(random::Min)));
@@ -1251,7 +1197,7 @@ namespace xl::xlink_modern {
             hp(local);
             h.w32(static_cast<u32>(file.list(file::LocalPropertyNames).size()));
             h.w32(static_cast<u32>(file.list(file::LocalPropertyEnumNames).size()));
-            h.w32(static_cast<u32>(m_direct.size()));
+            h.w32(static_cast<u32>(m_direct.values().size()));
             h.w32(static_cast<u32>(file.list(file::Randoms).size()));
             h.w32(static_cast<u32>(file.list(file::Curves).size()));
             h.w32(static_cast<u32>(point_index));
