@@ -150,6 +150,37 @@ Differences from later versions:
   comes from the game, so it is inferred per property from the values used.
   Each user header repeats the condition, random and curve counts.
 
+### Version 21
+
+Found in Super Mario Maker's `Block.rpx`, whose loader checks `XLNK` and
+the version, then binds the tables in place. It sits between version 19 and
+ELink2 29:
+
+| Part | Layout |
+| --- | --- |
+| Header | 0x4C: version 19's counts with the local property name, enum name and direct value counts after the trigger overwrite set count; then the counts of random entries, curves and curve points, the arrange region's position, the user count and the positions of the conditions and the name table |
+| Users | a position and a name per user; found by name with a linear search |
+| Definitions | name and type, no defaults, as in version 19 |
+| Parameters | one word each, a reference type and a 24-bit value, with the direct value table of later versions |
+| Asset parameter sets | every asset's full array, without a mask |
+| Trigger overwrite sets | a mask, then a word for every trigger parameter (zero where the mask is clear) |
+| Curves | 0x14, as ELink2 29 |
+| User header | 0x2C, as ELink2 29: counts of calls, assets and Random2 containers, then of slots, actions and triggers, then the trigger table position |
+| Calls | 0x18: name, asset id (16-bit), flags (16-bit), duration, parent, parameters, condition; no guid or name hash |
+| Triggers, actions, properties | as ELink2 29 |
+
+Container types are numbered as in later versions. Conditions have no type
+tag and share byte runs, as in version 19. A switch condition holds the
+property type, comparison and value, then a 16-bit enum name index and the
+solved and global bytes (0x10); random conditions hold a float weight. The
+game reads only switch and random conditions: blend and sequence children
+almost never have one, and eXamineLink keeps a blend condition as its
+minimum and maximum. The condition pool's byte order is swapped field by
+field, since its switch conditions mix widths.
+
+Converting from version 21 gives calls guids derived from the user and call
+names; converting to it drops them, as it does a base user's name.
+
 ## ELink (`eflk`) and SLink (`SLNK`)
 
 From Mario Kart 8's loaders (`Turbo.rpx`, with symbols from the 2014 linker
@@ -329,7 +360,7 @@ them (names, then trigger names, then the sound), then user names.
 Fields carry over by name between the schemas of two versions; anything
 without a counterpart is reported before saving.
 
-- XLink 19 and later: container types are renumbered (19 orders them
+- XLink 19, 21 and later: container types are renumbered (19 orders them
   Switch, Random, Blend, Sequence, Random2), parameters gain or lose the
   direct value table, and switch conditions take the property type inferred
   from their values. These mappings follow the loaders but were not seen
@@ -388,8 +419,7 @@ with an identical set, or its most common one.
 
 ## Not covered
 
-nnfck also identifies XLink 21. No database of it was available to verify
-against, so eXamineLink does not open it. XLink 27 to 36 other than
+XLink 27 to 36 other than
 27 to 31, 33, 34 and 36 open with the layout of their width and save as
 their own version. ELink2 36 pairs with SLink2 33 in Tears of the Kingdom
 and with SLink2 34 in Splatoon Raiders, Nintendo Switch Sports Resort and

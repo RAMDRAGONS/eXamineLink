@@ -5,6 +5,7 @@ A Qt 6 editor for Nintendo EPD's sound and effect link formats, aiming for wide 
 | Format                             | Versions                               | Games checked                                                                                                                                                                                                                                                    |
 | ---------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | XLink (`XLNK`, `.belnk`, `.bslnk`) | 19                                     | Splatoon (ELink2 v19, SLink2 v19)                                                                                                                                                                                                                                |
+|                                    | 21                                     | Super Mario Maker (ELink2 v21, SLink2 v21)                                                                                                                                                                                                                       |
 |                                    | 27 to 31, 32-bit                       | Mario Kart 8 Deluxe prototype (ELink2 v29, SLink2 v27); Splatoon 2, ARMS, Mario Kart 8 Deluxe, Game Builder Garage, The Legend of Zelda: Breath of the Wild on Wii U and Switch (ELink2 v30, SLink2 v28); Animal Crossing: New Horizons (ELink2 v31, SLink2 v29) |
 |                                    | 31 to 36, 64-bit                       | Splatoon 3 (ELink2 v34, SLink2 v31); The Legend of Zelda: Tears of the Kingdom (ELink2 v36, SLink2 v33); Splatoon Raiders, Nintendo Switch Sports Resort and Mario Kart World (ELink2 v36, SLink2 v34)                                                           |
 | ELink (`eflk`)                     | 9                                      | Mario Kart 8                                                                                                                                                                                                                                                     |
@@ -88,7 +89,7 @@ Problems show along the bottom, graded Information, Warning, Error and
 Fatal like the link libraries grade theirs. **Validate (with test save)**
 also serializes the database and reports anything that would stop a save.
 
-XLink versions after 19 store only a hash of each user's name. **Tools >
+XLink versions after 21 store only a hash of each user's name. **Tools >
 Name Users from a List** takes any text file of candidate names (an actor
 list, for instance) and names every user whose hash matches.
 
@@ -109,6 +110,7 @@ Effect presets:
 | `turbo`         | Mario Kart 8                                                                                                 | ELink 9   | big        | Shift-JIS |
 | `takumi`        | Animal Crossing: Happy Home Designer                                                                         | ELink 10  | little     | Shift-JIS |
 | `gambit`        | Splatoon                                                                                                     | ELink2 19 | big        | Shift-JIS |
+| `block`         | Super Mario Maker                                                                                            | ELink2 21 | big        | Shift-JIS |
 | `turbo-s-proto` | Mario Kart 8 Deluxe prototype                                                                                | ELink2 29 | little     | Shift-JIS |
 | `u-king`        | The Legend of Zelda: Breath of the Wild (Wii U)                                                              | ELink2 30 | big        | UTF-8     |
 | `u-king-s`      | The Legend of Zelda: Breath of the Wild (Switch), Game Builder Garage                                        | ELink2 30 | little     | UTF-8     |
@@ -126,6 +128,7 @@ Sound presets:
 | `alice`         | The Legend of Zelda: Tri Force Heroes                                 | SLink 69  | little     | Shift-JIS |
 | `takumi`        | Animal Crossing: Happy Home Designer                                  | SLink 73  | little     | Shift-JIS |
 | `gambit`        | Splatoon                                                              | SLink2 19 | big        | Shift-JIS |
+| `block`         | Super Mario Maker                                                     | SLink2 21 | big        | Shift-JIS |
 | `turbo-s-proto` | Mario Kart 8 Deluxe prototype                                         | SLink2 27 | little     | Shift-JIS |
 | `u-king`        | The Legend of Zelda: Breath of the Wild (Wii U)                       | SLink2 28 | big        | UTF-8     |
 | `u-king-s`      | The Legend of Zelda: Breath of the Wild (Switch), Game Builder Garage | SLink2 28 | little     | UTF-8     |
@@ -141,8 +144,9 @@ of the database's own format.
 Choosing a version by hand takes the byte order and encoding of a preset
 using it (of several, the one sharing the database's byte order, then its
 encoding), or keeps the database's own when the version stays the same. Before writing,
-it lists what the chosen version cannot hold: version 19 stores no
-parameter defaults or local properties and finds users by name; 32-bit
+it lists what the chosen version cannot hold: versions 19 and 21 store no
+parameter defaults and find users by name, 19 has no local properties and
+21 no call guids; 32-bit
 layouts have no grid containers; ELink 9 and SLink 50 and 69 have no
 shared pools or aliases, so those become copies. SLink 69 also stores
 per-user distance settings and surround panning, which 73 has no place for.

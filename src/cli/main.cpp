@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "core/crc32.hpp"
+#include "formats/codecs.hpp"
 #include "model/bridge.hpp"
 #include "model/convert.hpp"
 #include "model/document.hpp"
@@ -121,9 +122,10 @@ namespace {
 
     // Compares an edited model with the database it saved to, allowing for what
     // a format normalizes on save: parameter sets written in definition order
-    // (and, in version 19, filled out with defaults), users sorted by hash and
-    // known only by hash in later XLink versions, untyped version 19 conditions,
-    // SoundLink 50 call tables and actions sorted by name.
+    // (and, in versions 19 and 21, filled out with defaults), users sorted by
+    // hash and known only by hash in later XLink versions, conditions stored
+    // without a type and shared in versions 19 and 21, fields a version does not
+    // store, SoundLink 50 call tables and actions sorted by name.
     class CanonCompare {
     public:
         CanonCompare(const Document& a, const Document& b)
@@ -131,6 +133,8 @@ namespace {
             , B(b) {
             xlink_ = is_xlink(a.format);
             v19_ = xlink_ && a.version() == 19;
+            early_ = xlink_ && xlink_early::is_early(a.version());
+            guid_ = !xlink_ || xlink_early::has_call_guid(a.version());
             slink50_ = a.format == Format::SLink && a.version() == 50;
         }
 
@@ -157,10 +161,10 @@ namespace {
             if (fd.hidden)
                 return true;
             if (xlink_ && &a.schema() == &xlink::schemas().user) {
-                if (f == xlink::user::Name && !v19_)
+                if (f == xlink::user::Name && !early_)
                     return true;
                 if (f == xlink::user::Hash)
-                    return v19_ || user_hash(a) == user_hash(b) || fail("user hash differs");
+                    return early_ || user_hash(a) == user_hash(b) || fail("user hash differs");
                 if (f == xlink::user::BaseName && !v19_)
                     return true;
             }
@@ -168,13 +172,14 @@ namespace {
                 && (f == xlink::cond::PropertyType || f == xlink::cond::LocalPropertyEnumNameIdx
                     || f == xlink::cond::IsSolved || f == xlink::cond::IsGlobal))
                 return true;
-            if (xlink_ && &a.schema() == &xlink::schemas().call && f == xlink::call::KeyNameHash && v19_)
+            if (xlink_ && &a.schema() == &xlink::schemas().call
+                && ((f == xlink::call::KeyNameHash && early_) || (f == xlink::call::Guid && !guid_)))
                 return true;
             const bool ref = fd.target && field_kind(a, f) == DynKind::Ref;
             const NodeList* ta = ref ? fd.target(a) : nullptr;
-            // Version 19 condition tables are rebuilt from references, so they are
+            // Untyped condition tables are rebuilt from references, so they are
             // compared through what points at them.
-            if (ta && v19_ && ta->owner() == A.root.get() && ta->index() == xlink::file::Conditions) {
+            if (ta && early_ && ta->owner() == A.root.get() && ta->index() == xlink::file::Conditions) {
                 const NodeList* tb = fd.target(b);
                 const s64 ia = a.i(f), ib = b.i(f);
                 if ((ia < 0) != (ib < 0))
@@ -236,7 +241,7 @@ namespace {
                     || !(p->value(xlink::param::Value) == q.value(xlink::param::Value)))
                     return fail("parameter " + std::to_string(d) + " value differs");
             }
-            if (!v19_ && mb.size() != seen.size() && &a.owner()->schema() != &xlink::schemas().user)
+            if (!early_ && mb.size() != seen.size() && &a.owner()->schema() != &xlink::schemas().user)
                 return fail("parameter set gained entries");
             return true;
         }
@@ -255,7 +260,7 @@ namespace {
                         return false;
                     continue;
                 }
-                if (v19_ && &a == A.root.get() && l == xlink::file::Conditions)
+                if (early_ && &a == A.root.get() && l == xlink::file::Conditions)
                     continue;
                 if (la.size() != lb.size())
                     return fail(to_utf8(a.label(), A.encoding) + "." + la.def().name + " size "
@@ -263,7 +268,7 @@ namespace {
                 std::vector<int> order(la.size());
                 for (int k = 0; k < la.size(); ++k)
                     order[k] = k;
-                if (xlink_ && !v19_ && &a == A.root.get() && l == xlink::file::Users)
+                if (xlink_ && !early_ && &a == A.root.get() && l == xlink::file::Users)
                     std::stable_sort(order.begin(), order.end(),
                         [&](int x, int y) { return user_hash(la.at(x)) < user_hash(la.at(y)); });
                 if (slink50_ && &a.schema() == &eslink::sound_link(50).user
@@ -285,7 +290,7 @@ namespace {
 
         const Document& A;
         const Document& B;
-        bool xlink_ = false, v19_ = false, slink50_ = false;
+        bool xlink_ = false, v19_ = false, early_ = false, guid_ = true, slink50_ = false;
         // Lists of A written in another order: the row each entry was saved at.
         std::map<const NodeList*, std::vector<s64>> moved_;
         std::string why;

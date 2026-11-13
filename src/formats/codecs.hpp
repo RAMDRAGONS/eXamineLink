@@ -22,11 +22,15 @@ namespace xl {
         u16 global_property_count(const Node& file, const Node& user);
     } // namespace xlink_modern
 
-    // XLink resource version 19 (Splatoon on Wii U).
-    namespace xlink_v19 {
+    // XLink resource versions 19 (Splatoon) and 21 (Super Mario Maker), which
+    // find users by name and store conditions without a type.
+    namespace xlink_early {
         Document read(Bytes data);
         Buffer write(const Document& doc);
-    } // namespace xlink_v19
+        bool is_early(u32 version);
+        // Version 21 calls carry no guid.
+        bool has_call_guid(u32 version);
+    } // namespace xlink_early
 
     // ELink0 (Nintendo Land).
     namespace elink0_codec {

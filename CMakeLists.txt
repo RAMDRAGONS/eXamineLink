@@ -54,7 +54,7 @@ add_library(xl_core STATIC
   src/model/factory.cpp
   src/formats/string_pool.cpp
   src/formats/xlink_words.cpp
-  src/formats/xlink_v19.cpp
+  src/formats/xlink_early.cpp
   src/formats/xlink_modern.cpp
   src/formats/eslink.cpp
   src/formats/elink0.cpp

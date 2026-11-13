@@ -50,7 +50,9 @@ namespace xl {
             { F::SLink, 69, "SLink v69" },
             { F::SLink, 73, "SLink v73 (shared pools)" },
             { F::ELink2, 19, "ELink2 v19" },
+            { F::ELink2, 21, "ELink2 v21" },
             { F::SLink2, 19, "SLink2 v19" },
+            { F::SLink2, 21, "SLink2 v21" },
             { F::SLink2, 27, "SLink2 v27" },
             { F::SLink2, 28, "SLink2 v28" },
             { F::ELink2, 29, "ELink2 v29" },
@@ -83,6 +85,7 @@ namespace xl {
             { "turbo", "Mario Kart 8", F::ELink, 9, Big, Sjis },
             { "takumi", "Animal Crossing: Happy Home Designer", F::ELink, 10, Little, Sjis },
             { "gambit", "Splatoon", F::ELink2, 19, Big, Sjis },
+            { "block", "Super Mario Maker", F::ELink2, 21, Big, Sjis },
             { "turbo-s-proto", "Mario Kart 8 Deluxe prototype", F::ELink2, 29, Little, Sjis },
             { "u-king", "The Legend of Zelda: Breath of the Wild (Wii U)", F::ELink2, 30, Big, Utf8 },
             { "u-king-s", "The Legend of Zelda: Breath of the Wild (Switch), Game Builder Garage", F::ELink2, 30,
@@ -100,6 +103,7 @@ namespace xl {
             { "alice", "The Legend of Zelda: Tri Force Heroes", F::SLink, 69, Little, Sjis },
             { "takumi", "Animal Crossing: Happy Home Designer", F::SLink, 73, Little, Sjis },
             { "gambit", "Splatoon", F::SLink2, 19, Big, Sjis },
+            { "block", "Super Mario Maker", F::SLink2, 21, Big, Sjis },
             { "turbo-s-proto", "Mario Kart 8 Deluxe prototype", F::SLink2, 27, Little, Sjis },
             { "u-king", "The Legend of Zelda: Breath of the Wild (Wii U)", F::SLink2, 28, Big, Utf8 },
             { "u-king-s", "The Legend of Zelda: Breath of the Wild (Switch), Game Builder Garage", F::SLink2, 28,
@@ -171,6 +175,14 @@ namespace xl {
             return field < eslink::user::Header1 || field > eslink::user::Header7;
         if (is_xlink(doc.format) && &s == &schemas().user && field == user::GlobalPropertyCount)
             return doc.version() != 19 && xlink_modern::has_global_count(doc.version(), xlink_system(doc.format));
+        // Versions 19 and 21 know users and calls by name alone; 21 keeps no base
+        // user and no call guid.
+        if (is_xlink(doc.format) && xlink_early::is_early(doc.version())) {
+            if (&s == &schemas().user)
+                return field != user::Hash && (field != user::BaseName || doc.version() == 19);
+            if (&s == &schemas().call)
+                return field != call::KeyNameHash && (field != call::Guid || xlink_early::has_call_guid(doc.version()));
+        }
         if (!narrow_xlink(doc))
             return true;
         if (&s == &schemas().ctn)
@@ -181,7 +193,9 @@ namespace xl {
         return true;
     }
 
-    bool users_reorderable(const Document& doc) { return !is_xlink(doc.format) || doc.version() == 19; }
+    bool users_reorderable(const Document& doc) {
+        return !is_xlink(doc.format) || xlink_early::is_early(doc.version());
+    }
 
     bool stores_list(const Document& doc, const Schema& s, int list) {
         if (is_xlink(doc.format) && &s == &xlink::schemas().user && list == xlink::user::LocalProperties)
@@ -239,8 +253,8 @@ namespace xl {
             u32 version = le.u32_at(8);
             if (version > 0xFFFF)
                 version = r.u32_at(8);
-            if (version == 19)
-                return xlink_v19::read(payload);
+            if (xlink_early::is_early(version))
+                return xlink_early::read(payload);
             if (version >= 27 && version <= 36)
                 return xlink_modern::read(payload);
             throw Error("XLink resource version " + std::to_string(version) + " is not supported");
@@ -257,8 +271,8 @@ namespace xl {
         switch (doc.format) {
         case Format::ELink2:
         case Format::SLink2:
-            if (v == 19)
-                return xlink_v19::write(doc);
+            if (xlink_early::is_early(v))
+                return xlink_early::write(doc);
             if (v >= 27 && v <= 36)
                 return xlink_modern::write(doc);
             throw Error("XLink resource version " + std::to_string(v) + " cannot be written");

@@ -3,42 +3,64 @@
 
 #include "formats/codecs.hpp"
 #include "formats/string_pool.hpp"
+#include "formats/xlink_words.hpp"
 #include "model/xlink_schema.hpp"
 
-// XLink resource version 19, as Splatoon on Wii U loads it: a 0x40-byte
-// header, one offset per user, the parameter definitions (names only), every
-// asset's full parameter array, trigger overwrite sets, the random and curve
-// tables, the arrange-group region, the users, the condition pool and the name
-// table. Parameters are 8 bytes, a reference type and a full 32-bit value, so
-// there is no direct value table. Conditions carry no type tag: each reader
-// knows its parent container's type, and identical byte runs are shared.
-namespace xl::xlink_v19 {
+// XLink resource versions 19 (Splatoon on Wii U) and 21 (Super Mario Maker): a
+// header, the users' positions, the parameter definitions (name and type, no
+// defaults), every asset's full parameter array, trigger overwrite sets, the
+// random and curve tables, the arrange-group region, the users, the condition
+// pool and the name table. Conditions carry no type tag: each reader knows its
+// parent container's type, and identical byte runs are shared. Users are found
+// by name with a linear search.
+//
+// Version 19 stores parameters as 8 bytes, a reference type and a full 32-bit
+// value, and its users carry a 100-byte header with their name. Version 21
+// adds the local property name, enum name and direct value tables, stores
+// parameters as one word as later versions do, pairs each user's position with
+// its name, and lays users out as ELink2 29 does, with 24-byte calls that keep
+// no guid or name hash.
+namespace xl::xlink_early {
 
     using namespace xlink;
 
     namespace {
 
         constexpr u32 None32 = 0xFFFFFFFF;
-        constexpr u64 HeaderSize = 0x40;
-        constexpr u64 UserHeaderSize = 100;
-        constexpr u64 CallSize = 32;
+
+        struct Layout {
+            bool v21 = false;
+            u64 header() const { return v21 ? 0x4C : 0x40; }
+            u64 user_entry() const { return v21 ? 8 : 4; }
+            u64 param() const { return v21 ? 4 : 8; }
+            u64 user_header() const { return v21 ? 0x2C : 100; }
+            u64 call() const { return v21 ? 24 : 32; }
+            u64 curve() const { return v21 ? 20 : 16; }
+            u64 atrig() const { return v21 ? 24 : 28; }
+            u64 ptrig() const { return v21 ? 20 : 24; }
+            u64 awtrig() const { return v21 ? 16 : 20; }
+        };
 
         // Version 19 numbers container types in this order; later versions moved
         // Random2 up to sit after Random.
         constexpr s64 FromV19[] = { CT_Switch, CT_Random, CT_Blend, CT_Sequence, CT_Random2 };
         constexpr s64 ToV19[] = { 0, 1, 4, 2, 3, 5 };
 
-        s64 from_v19_type(u32 t) { return t < 5 ? FromV19[t] : t; }
+        s64 from_file_type(const Layout& g, u32 t) { return g.v21 || t >= 5 ? s64 { t } : FromV19[t]; }
 
-        u32 to_v19_type(s64 t) { return t >= 0 && t < 6 ? static_cast<u32>(ToV19[t]) : static_cast<u32>(t); }
+        u32 to_file_type(const Layout& g, s64 t) {
+            return g.v21 || t < 0 || t >= 6 ? static_cast<u32>(t) : static_cast<u32>(ToV19[t]);
+        }
 
-        class V19Reader {
+        class EarlyReader {
         public:
-            explicit V19Reader(Bytes data)
+            explicit EarlyReader(Bytes data)
                 : r(data, Endian::Big) {
-                r.require(0, HeaderSize, "XLink header");
+                r.require(0, 0xC, "XLink header");
                 if (r.u32_at(0x8) > 0xFFFF)
                     r.set_endian(Endian::Little);
+                g.v21 = r.u32_at(0x8) == 21;
+                r.require(0, g.header(), "XLink header");
             }
             Document run();
 
@@ -49,7 +71,9 @@ namespace xl::xlink_v19 {
             void infer_switch_types();
 
             Reader r;
+            Layout g;
             u64 m_names = 0, m_conditions = 0, m_ex = 0;
+            std::vector<u32> m_direct;
             Node* m_file = nullptr;
             std::map<std::pair<u64, s64>, int> m_condition_index;
             // Properties each switch condition is checked against.
@@ -57,23 +81,26 @@ namespace xl::xlink_v19 {
             std::vector<Node*> m_arrange_params;
         };
 
-        std::unique_ptr<Node> V19Reader::make_param(u64 at, int def) {
+        std::unique_ptr<Node> EarlyReader::make_param(u64 at, int def) {
             auto p = std::make_unique<Node>(&schemas().param);
-            const u32 rt = r.u32_at(at), v = r.u32_at(at + 4);
             p->set_i(param::Def, def);
-            p->set_i(param::RefType, rt);
-            p->set_i(param::DirectHint, -1);
-            if (rt == RT_String) {
-                p->set_s(param::Value, name(v));
+            if (g.v21) {
+                read_param_word(*p, r.u32_at(at), m_direct, [this](u64 off) { return name(off); });
             } else {
-                p->set_i(param::Value, v);
-                if (rt == RT_ArrangeGroup)
-                    m_arrange_params.push_back(p.get());
+                const u32 rt = r.u32_at(at), v = r.u32_at(at + 4);
+                p->set_i(param::RefType, rt);
+                p->set_i(param::DirectHint, -1);
+                if (rt == RT_String)
+                    p->set_s(param::Value, name(v));
+                else
+                    p->set_i(param::Value, v);
             }
+            if (p->i(param::RefType) == RT_ArrangeGroup)
+                m_arrange_params.push_back(p.get());
             return p;
         }
 
-        int V19Reader::condition(u64 off, s64 parent_type, const std::string& property) {
+        int EarlyReader::condition(u64 off, s64 parent_type, const std::string& property) {
             const auto key = std::make_pair(off, parent_type);
             if (const auto it = m_condition_index.find(key); it != m_condition_index.end()) {
                 if (parent_type == CT_Switch)
@@ -86,6 +113,19 @@ namespace xl::xlink_v19 {
             c.set_i(cond::PoolOffset, static_cast<s64>(off));
             switch (parent_type) {
             case CT_Switch:
+                if (g.v21) {
+                    const u32 pt = r.u32_at(at);
+                    c.set_i(cond::PropertyType, pt);
+                    c.set_i(cond::CompareType, r.u32_at(at + 4));
+                    if (pt == PR_Enum)
+                        c.set_s(cond::Value, name(r.u32_at(at + 8)));
+                    else
+                        c.set_i(cond::Value, r.u32_at(at + 8));
+                    c.set_i(cond::LocalPropertyEnumNameIdx, r.s16_at(at + 12));
+                    c.set_i(cond::IsSolved, r.u8_at(at + 14));
+                    c.set_i(cond::IsGlobal, r.u8_at(at + 15));
+                    break;
+                }
                 // The first word is always zero here: the property's type comes from
                 // the game's property definitions, so it is inferred afterwards.
                 c.set_i(cond::PropertyType, PR_S32);
@@ -99,6 +139,8 @@ namespace xl::xlink_v19 {
                 break;
             case CT_Blend:
                 c.set_i(cond::BlendMin, r.u32_at(at));
+                if (g.v21)
+                    c.set_i(cond::BlendMax, r.u32_at(at + 4));
                 break;
             default:
                 c.set_i(cond::ContinueOnFade, r.s32_at(at));
@@ -114,7 +156,7 @@ namespace xl::xlink_v19 {
         // A property compares against enum names when every value checked against it
         // is the start of a non-empty name; otherwise against numbers, floats when
         // any value is too large to be a plausible integer.
-        void V19Reader::infer_switch_types() {
+        void EarlyReader::infer_switch_types() {
             const std::string& pool = m_file->s(file::NameTablePool);
             std::vector<bool> start(pool.size() + 1, false);
             for (std::size_t i = 0; i < pool.size(); ++i)
@@ -148,7 +190,7 @@ namespace xl::xlink_v19 {
             }
         }
 
-        Document V19Reader::run() {
+        Document EarlyReader::run() {
             const auto& S = schemas();
             Document doc;
             doc.endian = r.endian();
@@ -156,17 +198,31 @@ namespace xl::xlink_v19 {
             Node& file = *doc.root;
             m_file = &file;
 
-            u32 h[16];
-            for (int k = 0; k < 16; ++k)
+            u32 h[19] = { };
+            for (u64 k = 0; k < g.header() / 4; ++k)
                 h[k] = r.u32_at(4 * k);
             const u32 data_size = h[1];
             file.set_i(file::Version, h[2]);
             const u32 n_up = h[3], n_ap = h[4], n_tp = h[6];
             file.set_i(file::NumCustomAssetParam, h[5]);
-            const u32 n_res = h[7], n_tsets = h[8], n_random = h[9], n_curve = h[10], n_point = h[11], n_user = h[12];
-            m_conditions = h[13];
-            m_ex = h[14];
-            m_names = h[15];
+            const u32 n_res = h[7], n_tsets = h[8];
+            // Version 21 inserts the local property name, enum name and direct value
+            // counts after the trigger overwrite set count.
+            const int x = g.v21 ? 3 : 0;
+            const u32 n_local = g.v21 ? h[9] : 0, n_enum = g.v21 ? h[10] : 0, n_direct = g.v21 ? h[11] : 0;
+            const u32 n_random = h[9 + x], n_curve = h[10 + x], n_point = h[11 + x];
+            u32 n_user;
+            if (g.v21) {
+                m_ex = h[15];
+                n_user = h[16];
+                m_conditions = h[17];
+                m_names = h[18];
+            } else {
+                n_user = h[12];
+                m_conditions = h[13];
+                m_ex = h[14];
+                m_names = h[15];
+            }
             const u64 end = std::min<u64>(data_size, r.size());
             if (m_names > end || m_conditions > m_names)
                 throw Error("XLink table positions are out of order");
@@ -176,8 +232,9 @@ namespace xl::xlink_v19 {
                 const auto c = r.slice(m_conditions, m_names - m_conditions, "condition table");
                 file.set_s(file::ConditionPool, std::string(c.begin(), c.end()));
             }
+            const auto user_at = [&](u32 ui) { return u64 { r.u32_at(g.header() + g.user_entry() * ui) }; };
 
-            u64 p = HeaderSize + 4 * u64 { n_user };
+            u64 p = g.header() + g.user_entry() * n_user;
             const int lists[3] = { file::UserParamDefs, file::AssetParamDefs, file::TriggerParamDefs };
             const u32 counts[3] = { n_up, n_ap, n_tp };
             for (int k = 0; k < 3; ++k)
@@ -187,33 +244,55 @@ namespace xl::xlink_v19 {
                     d.set_i(pdef::Type, r.u32_at(p + 4));
                 }
 
+            // The direct values follow the parameter sets that index them.
+            const u64 set_bytes = g.param() * n_ap;
+            const u64 trigger_set_bytes = 4 + g.param() * n_tp;
+            u64 tables = p + g.param() * u64 { n_res } + trigger_set_bytes * n_tsets;
+            if (g.v21) {
+                for (u32 k = 0; k < n_local; ++k, tables += 4)
+                    file.list(file::LocalPropertyNames)
+                        .append(std::make_unique<Node>(&S.name))
+                        .set_s(name::Name, name(r.u32_at(tables)));
+                for (u32 k = 0; k < n_enum; ++k, tables += 4)
+                    file.list(file::LocalPropertyEnumNames)
+                        .append(std::make_unique<Node>(&S.name))
+                        .set_s(name::Name, name(r.u32_at(tables)));
+                m_direct.resize(n_direct);
+                for (u32 k = 0; k < n_direct; ++k)
+                    m_direct[k] = r.u32_at(tables + 4 * k);
+                const auto t = r.slice(tables, 4 * u64 { n_direct }, "direct value table");
+                file.set_s(file::DirectValuePool, std::string(t.begin(), t.end()));
+                tables += 4 * u64 { n_direct };
+            }
+
             if (n_ap == 0 ? n_res != 0 : n_res % n_ap != 0)
                 throw Error(
                     "asset parameter count " + std::to_string(n_res) + " is not a multiple of " + std::to_string(n_ap));
             const u32 n_sets = n_ap ? n_res / n_ap : 0;
             for (u32 s = 0; s < n_sets; ++s) {
                 Node& set = file.list(file::AssetParamSets).append(std::make_unique<Node>(&S.pset));
-                for (u32 k = 0; k < n_ap; ++k, p += 8)
+                for (u32 k = 0; k < n_ap; ++k, p += g.param())
                     set.list(pset::Params).append(make_param(p, static_cast<int>(k)));
             }
             for (u32 s = 0; s < n_tsets; ++s) {
                 Node& set = file.list(file::TriggerParamSets).append(std::make_unique<Node>(&S.pset));
                 const u32 mask = r.u32_at(p);
                 p += 4;
-                for (u32 k = 0; k < n_tp; ++k, p += 8)
+                for (u32 k = 0; k < n_tp; ++k, p += g.param())
                     if (mask >> k & 1)
                         set.list(pset::Params).append(make_param(p, static_cast<int>(k)));
-                    else if (r.u32_at(p) != 0 || r.u32_at(p + 4) != 0)
+                    else if (r.u32_at(p) != 0 || (!g.v21 && r.u32_at(p + 4) != 0))
                         throw Error("trigger overwrite set " + std::to_string(s)
                             + " holds data for a parameter it does not set");
             }
+            p = tables;
             for (u32 k = 0; k < n_random; ++k, p += 8) {
                 Node& n = file.list(file::Randoms).append(std::make_unique<Node>(&S.random));
                 n.set_i(random::Min, r.u32_at(p));
                 n.set_i(random::Max, r.u32_at(p + 4));
             }
-            const u64 points = p + 16 * u64 { n_curve };
-            for (u32 k = 0; k < n_curve; ++k, p += 16) {
+            const u64 points = p + g.curve() * n_curve;
+            for (u32 k = 0; k < n_curve; ++k, p += g.curve()) {
                 Node& n = file.list(file::Curves).append(std::make_unique<Node>(&S.curve));
                 const u16 first = r.u16_at(p), count = r.u16_at(p + 2);
                 if (u64 { first } + count > n_point)
@@ -222,7 +301,9 @@ namespace xl::xlink_v19 {
                 n.set_i(curve::IsPropGlobal, r.u16_at(p + 6));
                 n.set_s(curve::PropName, name(r.u32_at(p + 8)));
                 n.set_i(curve::PropIdx, r.s32_at(p + 12));
-                n.set_i(curve::LocalPropertyNameIdx, -1);
+                n.set_i(curve::LocalPropertyNameIdx, g.v21 ? r.s16_at(p + 16) : -1);
+                if (g.v21)
+                    n.set_i(curve::UpdateType, r.s16_at(p + 18));
                 for (u32 j = 0; j < count; ++j) {
                     Node& pt = n.list(curve::Points).append(std::make_unique<Node>(&S.point));
                     pt.set_i(point::X, r.u32_at(points + 8 * (u64 { first } + j)));
@@ -230,21 +311,27 @@ namespace xl::xlink_v19 {
                 }
             }
 
-            const u64 set_bytes = 8 * u64 { n_ap };
-            const u64 trigger_set_bytes = 4 + 8 * u64 { n_tp };
             u64 conditions_seen = 0;
             for (u32 ui = 0; ui < n_user; ++ui) {
-                const u64 at = r.u32_at(HeaderSize + 4 * ui);
+                const u64 at = user_at(ui);
                 Node& u = file.list(file::Users).append(std::make_unique<Node>(&S.user));
+                // Counts of calls, then (from the fourth) action slots, actions, action
+                // triggers, properties, property triggers and always triggers.
                 u32 w[25];
-                for (int k = 0; k < 25; ++k)
+                for (u64 k = 0; k < g.user_header() / 4; ++k)
                     w[k] = r.u32_at(at + 4 * k);
-                conditions_seen = w[3];
-                u.set_s(user::Name, name(w[23]));
-                u.set_s(user::BaseName, name(w[24]));
                 const u32 n_call = w[1];
-                u64 q = at + UserHeaderSize;
-                for (u32 k = 0; k < n_up; ++k, q += 8)
+                const u64 triggers = at + (g.v21 ? w[10] : w[19]);
+                const u32* lc = w + 4;
+                if (g.v21) {
+                    u.set_s(user::Name, name(r.u32_at(g.header() + g.user_entry() * ui + 4)));
+                } else {
+                    conditions_seen = w[3];
+                    u.set_s(user::Name, name(w[23]));
+                    u.set_s(user::BaseName, name(w[24]));
+                }
+                u64 q = at + g.user_header();
+                for (u32 k = 0; k < n_up; ++k, q += g.param())
                     u.list(user::UserParams).append(make_param(q, static_cast<int>(k)));
                 {
                     const auto t = r.slice(q, 2 * u64 { n_call }, "sorted call order");
@@ -252,15 +339,14 @@ namespace xl::xlink_v19 {
                 }
                 q += 2 * u64 { n_call } + (n_call & 1 ? 2 : 0);
                 const u64 calls = q;
-                const u64 containers = calls + CallSize * n_call;
-                const u64 triggers = at + w[19];
+                const u64 containers = calls + g.call() * n_call;
 
                 std::map<u64, int> container_index;
                 for (u64 c = containers; c < triggers;) {
                     container_index[c - containers] = u.list(user::Containers).size();
                     Node& n = u.list(user::Containers).append(std::make_unique<Node>(&S.ctn));
                     const u32 type = r.u32_at(c);
-                    n.set_i(ctn::Type, from_v19_type(type));
+                    n.set_i(ctn::Type, from_file_type(g, type));
                     n.set_i(ctn::ChildStart, r.s32_at(c + 4));
                     n.set_i(ctn::ChildEnd, r.s32_at(c + 8));
                     if (type == 0) {
@@ -277,16 +363,24 @@ namespace xl::xlink_v19 {
 
                 std::vector<s64> parent_type(n_call, -1);
                 std::vector<std::string> parent_prop(n_call);
+                const u64 param_field = g.v21 ? 16 : 24, cond_field = g.v21 ? 20 : 28;
                 for (u32 k = 0; k < n_call; ++k) {
-                    const u64 c = calls + CallSize * k;
+                    const u64 c = calls + g.call() * k;
                     Node& n = u.list(user::Calls).append(std::make_unique<Node>(&S.call));
                     n.set_s(call::KeyName, name(r.u32_at(c)));
-                    n.set_i(call::AssetId, r.s32_at(c + 4));
-                    n.set_i(call::Guid, r.u32_at(c + 8));
-                    n.set_i(call::Duration, r.s32_at(c + 12));
-                    n.set_i(call::ParentIndex, r.s32_at(c + 16));
-                    n.set_i(call::Flag, r.u32_at(c + 20));
-                    const u32 param = r.u32_at(c + 24);
+                    if (g.v21) {
+                        n.set_i(call::AssetId, r.s16_at(c + 4));
+                        n.set_i(call::Flag, r.u16_at(c + 6));
+                        n.set_i(call::Duration, r.s32_at(c + 8));
+                        n.set_i(call::ParentIndex, r.s32_at(c + 12));
+                    } else {
+                        n.set_i(call::AssetId, r.s32_at(c + 4));
+                        n.set_i(call::Guid, r.u32_at(c + 8));
+                        n.set_i(call::Duration, r.s32_at(c + 12));
+                        n.set_i(call::ParentIndex, r.s32_at(c + 16));
+                        n.set_i(call::Flag, r.u32_at(c + 20));
+                    }
+                    const u32 param = r.u32_at(c + param_field);
                     if (call_is_container(n.i(call::Flag))) {
                         if (param != None32) {
                             const auto it = container_index.find(param);
@@ -321,7 +415,7 @@ namespace xl::xlink_v19 {
                     }
                 }
                 for (u32 k = 0; k < n_call; ++k) {
-                    const u32 cond = r.u32_at(calls + CallSize * k + 28);
+                    const u32 cond = r.u32_at(calls + g.call() * k + cond_field);
                     if (cond == None32)
                         continue;
                     Node& n = u.list(user::Calls).at(static_cast<int>(k));
@@ -329,11 +423,14 @@ namespace xl::xlink_v19 {
                         condition(cond, parent_type[k] < 0 ? s64 { CT_Switch } : parent_type[k], parent_prop[k]));
                 }
 
-                const auto call_of = [&](u64 pos, u64 key_name) -> s64 {
-                    if (pos % CallSize != 0 || pos / CallSize >= n_call)
+                // Triggers point at calls by their byte position in the call table;
+                // version 19 also names the call.
+                const auto call_of = [&](u64 at_) -> s64 {
+                    const u64 pos = r.u32_at(g.v21 ? at_ : at_ + 4);
+                    if (pos % g.call() != 0 || pos / g.call() >= n_call)
                         throw Error("trigger in user " + u.label() + " points between calls");
-                    const s64 i = static_cast<s64>(pos / CallSize);
-                    if (name(key_name) != u.list(user::Calls).at(static_cast<int>(i)).s(call::KeyName))
+                    const s64 i = static_cast<s64>(pos / g.call());
+                    if (!g.v21 && name(r.u32_at(at_)) != u.list(user::Calls).at(static_cast<int>(i)).s(call::KeyName))
                         throw Error("trigger in user " + u.label() + " names a different call than it points at");
                     return i;
                 };
@@ -344,73 +441,80 @@ namespace xl::xlink_v19 {
                         throw Error("trigger in user " + u.label() + " points between overwrite sets");
                     return v / trigger_set_bytes;
                 };
+                // The call reference takes one word in version 21 and two in 19.
+                const u64 cw = g.v21 ? 4 : 8;
                 q = triggers;
-                for (u32 k = 0; k < w[4]; ++k, q += 8) {
+                for (u32 k = 0; k < lc[0]; ++k, q += 8) {
                     Node& n = u.list(user::ActionSlots).append(std::make_unique<Node>(&S.slot));
                     n.set_s(slot::Name, name(r.u32_at(q)));
                     n.set_i(slot::ActionStart, r.s16_at(q + 4));
                     n.set_i(slot::ActionEnd, r.s16_at(q + 6));
                 }
-                for (u32 k = 0; k < w[5]; ++k, q += 12) {
+                for (u32 k = 0; k < lc[1]; ++k, q += 12) {
                     Node& n = u.list(user::Actions).append(std::make_unique<Node>(&S.action));
                     n.set_s(action::Name, name(r.u32_at(q)));
                     n.set_i(action::TriggerStart, r.s32_at(q + 4));
                     n.set_i(action::TriggerEnd, r.s32_at(q + 8));
                 }
-                for (u32 k = 0; k < w[6]; ++k, q += 28) {
+                for (u32 k = 0; k < lc[2]; ++k, q += g.atrig()) {
                     Node& n = u.list(user::ActionTriggers).append(std::make_unique<Node>(&S.atrig));
                     n.set_i(atrig::Guid, r.u32_at(q));
-                    n.set_i(atrig::AssetCall, call_of(r.u32_at(q + 8), r.u32_at(q + 4)));
-                    n.set_i(atrig::EndFrame, r.s32_at(q + 16));
-                    n.set_i(atrig::Flag, r.u16_at(q + 20));
-                    n.set_i(atrig::OverwriteHash, r.u16_at(q + 22));
+                    n.set_i(atrig::AssetCall, call_of(q + 4));
+                    const u64 t = q + 4 + cw;
+                    n.set_i(atrig::EndFrame, r.s32_at(t + 4));
+                    n.set_i(atrig::Flag, r.u16_at(t + 8));
+                    n.set_i(atrig::OverwriteHash, r.u16_at(t + 10));
                     if (trigger_names_previous_action(n.i(atrig::Flag)))
-                        n.set_s(atrig::PreviousActionName, name(r.u32_at(q + 12)));
+                        n.set_s(atrig::PreviousActionName, name(r.u32_at(t)));
                     else
-                        n.set_i(atrig::StartFrame, r.s32_at(q + 12));
-                    n.set_i(atrig::Overwrite, overwrite(r.u32_at(q + 24)));
+                        n.set_i(atrig::StartFrame, r.s32_at(t));
+                    n.set_i(atrig::Overwrite, overwrite(r.u32_at(t + 12)));
                 }
-                for (u32 k = 0; k < w[7]; ++k, q += 16) {
+                for (u32 k = 0; k < lc[3]; ++k, q += 16) {
                     Node& n = u.list(user::Properties).append(std::make_unique<Node>(&S.prop));
                     n.set_s(prop::Name, name(r.u32_at(q)));
                     n.set_i(prop::IsGlobal, r.s32_at(q + 4));
                     n.set_i(prop::TriggerStart, r.s32_at(q + 8));
                     n.set_i(prop::TriggerEnd, r.s32_at(q + 12));
                 }
-                for (u32 k = 0; k < w[8]; ++k, q += 24) {
+                for (u32 k = 0; k < lc[4]; ++k, q += g.ptrig()) {
                     Node& n = u.list(user::PropertyTriggers).append(std::make_unique<Node>(&S.ptrig));
                     n.set_i(ptrig::Guid, r.u32_at(q));
-                    n.set_i(ptrig::AssetCall, call_of(r.u32_at(q + 8), r.u32_at(q + 4)));
-                    if (const u32 c = r.u32_at(q + 12); c != None32) {
+                    n.set_i(ptrig::AssetCall, call_of(q + 4));
+                    const u64 t = q + 4 + cw;
+                    if (const u32 c = r.u32_at(t); c != None32) {
                         std::string prop_name;
                         for (const auto& pr : u.list(user::Properties))
                             if (pr->i(prop::TriggerStart) <= k && k <= pr->i(prop::TriggerEnd))
                                 prop_name = pr->s(prop::Name);
                         n.set_i(ptrig::Condition, condition(c, CT_Switch, prop_name));
                     }
-                    n.set_i(ptrig::Flag, r.u16_at(q + 16));
-                    n.set_i(ptrig::OverwriteHash, r.u16_at(q + 18));
-                    n.set_i(ptrig::Overwrite, overwrite(r.u32_at(q + 20)));
+                    n.set_i(ptrig::Flag, r.u16_at(t + 4));
+                    n.set_i(ptrig::OverwriteHash, r.u16_at(t + 6));
+                    n.set_i(ptrig::Overwrite, overwrite(r.u32_at(t + 8)));
                 }
-                for (u32 k = 0; k < w[9]; ++k, q += 20) {
+                for (u32 k = 0; k < lc[5]; ++k, q += g.awtrig()) {
                     Node& n = u.list(user::AlwaysTriggers).append(std::make_unique<Node>(&S.awtrig));
                     n.set_i(awtrig::Guid, r.u32_at(q));
-                    n.set_i(awtrig::AssetCall, call_of(r.u32_at(q + 8), r.u32_at(q + 4)));
-                    n.set_i(awtrig::Flag, r.u16_at(q + 12));
-                    n.set_i(awtrig::OverwriteHash, r.u16_at(q + 14));
-                    n.set_i(awtrig::Overwrite, overwrite(r.u32_at(q + 16)));
+                    n.set_i(awtrig::AssetCall, call_of(q + 4));
+                    const u64 t = q + 4 + cw;
+                    n.set_i(awtrig::Flag, r.u16_at(t));
+                    n.set_i(awtrig::OverwriteHash, r.u16_at(t + 2));
+                    n.set_i(awtrig::Overwrite, overwrite(r.u32_at(t + 4)));
                 }
             }
-            infer_switch_types();
-            file.set_i(file::ConditionCountBias,
-                static_cast<s64>(conditions_seen) - static_cast<s64>(file.list(file::Conditions).size()));
+            if (!g.v21) {
+                infer_switch_types();
+                file.set_i(file::ConditionCountBias,
+                    static_cast<s64>(conditions_seen) - static_cast<s64>(file.list(file::Conditions).size()));
+            }
 
             // Arrange groups fill the region before the first user; reading it whole
             // keeps groups nothing points at yet.
             std::map<u64, int> arrange_index;
             u64 region_end = m_conditions;
             for (u32 ui = 0; ui < n_user; ++ui)
-                region_end = std::min<u64>(region_end, r.u32_at(HeaderSize + 4 * ui));
+                region_end = std::min<u64>(region_end, user_at(ui));
             const auto read_group = [&](u64 off) {
                 arrange_index[off] = file.list(file::ArrangeGroups).size();
                 Node& grp = file.list(file::ArrangeGroups).append(std::make_unique<Node>(&S.arrange));
@@ -459,69 +563,92 @@ namespace xl::xlink_v19 {
 
         // ---------------------------------------------------------------- writing
 
-        // Version 19 keeps no defaults, so a parameter a set leaves out is written
+        // These versions keep no defaults, so a parameter a set leaves out is written
         // as its definition's default from a later version, or zero.
-        u32 default_word(const Node& def, StringPool& names, u32& ref_type) {
-            ref_type = RT_Direct;
+        Node default_param(const Node& def) {
+            Node p(&schemas().param);
+            p.set_i(param::Def, def.row());
+            p.set_i(param::RefType, RT_Direct);
+            p.set_i(param::DirectHint, -1);
             switch (def.i(pdef::Type)) {
             case PT_Float:
-                return f32_bits(static_cast<f32>(def.f64v(pdef::Default)));
+                p.set_i(param::Value, f32_bits(static_cast<f32>(def.f64v(pdef::Default))));
+                break;
             case PT_String:
-                ref_type = RT_String;
-                return names.offset(def.s(pdef::Default));
+                p.set_i(param::RefType, RT_String);
+                p.set_s(param::Value, def.s(pdef::Default));
+                break;
             default:
-                return static_cast<u32>(def.i(pdef::Default));
+                p.set_i(param::Value, static_cast<u32>(def.i(pdef::Default)));
+                break;
             }
+            return p;
         }
 
-        class V19Writer {
+        class EarlyWriter {
         public:
-            explicit V19Writer(const Document& doc)
+            explicit EarlyWriter(const Document& doc)
                 : d(doc)
                 , file(*doc.root)
                 , w(doc.endian)
                 , m_names(file.s(file::NameTablePool))
-                , m_cond_pool(file.s(file::ConditionPool)) { }
+                , m_direct(file.s(file::DirectValuePool), doc.endian)
+                , m_cond_pool(file.s(file::ConditionPool)) {
+                g.v21 = file.i(file::Version) == 21;
+            }
             Buffer run();
 
         private:
-            void param(const Node* p, const Node* def, s64 index);
+            void param(const Node& p);
+            // The parameter of `defs` entry `k` that `list` sets, or its default.
+            void param_or_default(const NodeList& list, const NodeList& defs, int k);
             u32 condition_offset(s64 index);
             void write_user(const Node& u);
 
             const Document& d;
             const Node& file;
             Writer w;
+            Layout g;
             StringPool m_names;
+            DirectValues m_direct;
             std::string m_cond_pool;
             std::map<s64, u32> m_cond_offsets;
             std::vector<u64> m_arrange_pos;
             u64 n_sets_bytes = 0;
         };
 
-        void V19Writer::param(const Node* p, const Node* def, s64 index) {
-            if (!p) {
-                u32 rt = RT_Direct, v = 0;
-                if (def)
-                    v = default_word(*def, m_names, rt);
-                w.w32(rt);
-                w.w32(v);
+        const Node* find_param(const NodeList& list, int k) {
+            for (const auto& p : list)
+                if (p->i(param::Def) == k)
+                    return p.get();
+            return nullptr;
+        }
+
+        void EarlyWriter::param(const Node& p) {
+            if (g.v21) {
+                w.w32(param_word(p, m_names, m_direct, m_arrange_pos));
                 return;
             }
-            (void)index;
-            const s64 rt = p->i(param::RefType);
+            const s64 rt = p.i(param::RefType);
             w.w32(static_cast<u32>(rt));
             if (rt == RT_String)
-                w.w32(m_names.offset(p->s(param::Value)));
+                w.w32(m_names.offset(p.s(param::Value)));
             else if (rt == RT_ArrangeGroup)
-                w.w32(static_cast<u32>(m_arrange_pos.at(static_cast<std::size_t>(p->i(param::Value)))));
+                w.w32(static_cast<u32>(m_arrange_pos.at(static_cast<std::size_t>(p.i(param::Value)))));
             else
-                w.w32(static_cast<u32>(p->i(param::Value)));
+                w.w32(static_cast<u32>(p.i(param::Value)));
+        }
+
+        void EarlyWriter::param_or_default(const NodeList& list, const NodeList& defs, int k) {
+            if (const Node* found = find_param(list, k))
+                param(*found);
+            else
+                param(default_param(defs.at(k)));
         }
 
         // Conditions share identical byte runs anywhere in the pool, so an unchanged
         // condition finds its original bytes again and new ones are appended.
-        u32 V19Writer::condition_offset(s64 index) {
+        u32 EarlyWriter::condition_offset(s64 index) {
             if (const auto it = m_cond_offsets.find(index); it != m_cond_offsets.end())
                 return it->second;
             if (index >= file.list(file::Conditions).size())
@@ -532,9 +659,14 @@ namespace xl::xlink_v19 {
             switch (type) {
             case CT_Switch: {
                 const s64 pt = c.i(cond::PropertyType);
-                b.w32(0);
+                b.w32(g.v21 ? static_cast<u32>(pt) : 0);
                 b.w32(static_cast<u32>(c.i(cond::CompareType)));
                 b.w32(pt == PR_Enum ? m_names.offset(c.s(cond::Value)) : static_cast<u32>(c.i(cond::Value)));
+                if (g.v21) {
+                    b.ws16(static_cast<s16>(c.i(cond::LocalPropertyEnumNameIdx)));
+                    b.w8(static_cast<u8>(c.i(cond::IsSolved)));
+                    b.w8(static_cast<u8>(c.i(cond::IsGlobal)));
+                }
                 break;
             }
             case CT_Random:
@@ -543,6 +675,8 @@ namespace xl::xlink_v19 {
                 break;
             case CT_Blend:
                 b.w32(static_cast<u32>(c.i(cond::BlendMin)));
+                if (g.v21)
+                    b.w32(static_cast<u32>(c.i(cond::BlendMax)));
                 break;
             default:
                 b.ws32(static_cast<s32>(c.i(cond::ContinueOnFade)));
@@ -570,7 +704,7 @@ namespace xl::xlink_v19 {
             return static_cast<u32>(at);
         }
 
-        void V19Writer::write_user(const Node& u) {
+        void EarlyWriter::write_user(const Node& u) {
             const std::size_t at = w.pos();
             const NodeList& calls = u.list(user::Calls);
             const NodeList& ctns = u.list(user::Containers);
@@ -581,37 +715,45 @@ namespace xl::xlink_v19 {
                 ctn_pos.push_back(ctn_bytes);
                 ctn_bytes += c->i(ctn::Type) == CT_Switch ? 24 : 12;
             }
-            const u64 n_up = file.list(file::UserParamDefs).size();
-            const u64 trigger_table
-                = UserHeaderSize + 8 * n_up + 2 * u64(n_call) + (n_call & 1 ? 2 : 0) + CallSize * n_call + ctn_bytes;
-            int assets = 0;
-            for (const auto& c : calls)
+            const NodeList& up_defs = file.list(file::UserParamDefs);
+            const u64 n_up = up_defs.size();
+            const u64 trigger_table = g.user_header() + g.param() * n_up + 2 * u64(n_call) + (n_call & 1 ? 2 : 0)
+                + g.call() * n_call + ctn_bytes;
+            int assets = 0, random2 = 0;
+            for (const auto& c : calls) {
                 assets += !call_is_container(c->i(call::Flag));
-
-            const s64 bias = file.i(file::ConditionCountBias);
-            const s64 n_conds = static_cast<s64>(file.list(file::Conditions).size()) + bias;
-            const u32 header[25] = { 0, static_cast<u32>(n_call), static_cast<u32>(assets),
-                static_cast<u32>(std::max<s64>(n_conds, 0)), static_cast<u32>(u.list(user::ActionSlots).size()),
+                const s64 ci = c->i(call::Container);
+                random2 += call_is_container(c->i(call::Flag)) && ci >= 0 && ci < ctns.size()
+                    && ctns.at(static_cast<int>(ci)).i(ctn::Type) == CT_Random2;
+            }
+            const u32 lists[6] = { static_cast<u32>(u.list(user::ActionSlots).size()),
                 static_cast<u32>(u.list(user::Actions).size()), static_cast<u32>(u.list(user::ActionTriggers).size()),
                 static_cast<u32>(u.list(user::Properties).size()),
                 static_cast<u32>(u.list(user::PropertyTriggers).size()),
-                static_cast<u32>(u.list(user::AlwaysTriggers).size()), 0, 0, 0,
-                static_cast<u32>(file.list(file::Randoms).size()), 0, static_cast<u32>(file.list(file::Curves).size()),
-                0, 0, 0, static_cast<u32>(trigger_table), 0, 0, 0, m_names.offset(u.s(user::Name)),
-                m_names.offset(u.s(user::BaseName)) };
-            for (const u32 v : header)
-                w.w32(v);
+                static_cast<u32>(u.list(user::AlwaysTriggers).size()) };
 
-            const NodeList& up = u.list(user::UserParams);
-            for (u64 k = 0; k < n_up; ++k) {
-                const Node* found = nullptr;
-                for (const auto& p : up)
-                    if (p->i(param::Def) == static_cast<s64>(k)) {
-                        found = p.get();
-                        break;
-                    }
-                param(found, &file.list(file::UserParamDefs).at(static_cast<int>(k)), static_cast<s64>(k));
+            if (g.v21) {
+                w.w32(0);
+                w.w32(static_cast<u32>(n_call));
+                w.w32(static_cast<u32>(assets));
+                w.w32(static_cast<u32>(random2));
+                for (const u32 v : lists)
+                    w.w32(v);
+                w.w32(static_cast<u32>(trigger_table));
+            } else {
+                const s64 bias = file.i(file::ConditionCountBias);
+                const s64 n_conds = static_cast<s64>(file.list(file::Conditions).size()) + bias;
+                const u32 header[25] = { 0, static_cast<u32>(n_call), static_cast<u32>(assets),
+                    static_cast<u32>(std::max<s64>(n_conds, 0)), lists[0], lists[1], lists[2], lists[3], lists[4],
+                    lists[5], 0, 0, 0, static_cast<u32>(file.list(file::Randoms).size()), 0,
+                    static_cast<u32>(file.list(file::Curves).size()), 0, 0, 0, static_cast<u32>(trigger_table), 0, 0, 0,
+                    m_names.offset(u.s(user::Name)), m_names.offset(u.s(user::BaseName)) };
+                for (const u32 v : header)
+                    w.w32(v);
             }
+
+            for (u64 k = 0; k < n_up; ++k)
+                param_or_default(u.list(user::UserParams), up_defs, static_cast<int>(k));
 
             // The same key-name order the later versions use, with ties kept as read.
             std::vector<int> order(n_call);
@@ -642,11 +784,18 @@ namespace xl::xlink_v19 {
 
             for (const auto& c : calls) {
                 w.w32(m_names.offset(c->s(call::KeyName)));
-                w.ws32(static_cast<s32>(c->i(call::AssetId)));
-                w.w32(static_cast<u32>(c->i(call::Guid)));
-                w.ws32(static_cast<s32>(c->i(call::Duration)));
-                w.ws32(static_cast<s32>(c->i(call::ParentIndex)));
-                w.w32(static_cast<u32>(c->i(call::Flag)));
+                if (g.v21) {
+                    w.ws16(static_cast<s16>(c->i(call::AssetId)));
+                    w.w16(static_cast<u16>(c->i(call::Flag)));
+                    w.ws32(static_cast<s32>(c->i(call::Duration)));
+                    w.ws32(static_cast<s32>(c->i(call::ParentIndex)));
+                } else {
+                    w.ws32(static_cast<s32>(c->i(call::AssetId)));
+                    w.w32(static_cast<u32>(c->i(call::Guid)));
+                    w.ws32(static_cast<s32>(c->i(call::Duration)));
+                    w.ws32(static_cast<s32>(c->i(call::ParentIndex)));
+                    w.w32(static_cast<u32>(c->i(call::Flag)));
+                }
                 if (call_is_container(c->i(call::Flag))) {
                     const s64 ci = c->i(call::Container);
                     w.w32(ci >= 0 && ci < static_cast<s64>(ctn_pos.size()) ? static_cast<u32>(ctn_pos[ci]) : None32);
@@ -659,7 +808,7 @@ namespace xl::xlink_v19 {
             }
             for (const auto& c : ctns) {
                 const s64 type = c->i(ctn::Type);
-                w.w32(to_v19_type(type));
+                w.w32(to_file_type(g, type));
                 w.ws32(static_cast<s32>(c->i(ctn::ChildStart)));
                 w.ws32(static_cast<s32>(c->i(ctn::ChildEnd)));
                 if (type == CT_Switch) {
@@ -673,13 +822,15 @@ namespace xl::xlink_v19 {
             if (w.pos() - at != trigger_table)
                 throw Error("internal error: trigger table of " + u.label() + " misplaced");
 
-            const u64 tset_bytes = 4 + 8 * u64(file.list(file::TriggerParamDefs).size());
+            const u64 tset_bytes = 4 + g.param() * u64(file.list(file::TriggerParamDefs).size());
+            // Version 19 names the call before its position.
             const auto call_ref = [&](s64 i) {
                 if (i < 0 || i >= n_call)
                     throw Error("a trigger in " + u.label() + " names call " + std::to_string(i) + " of "
                         + std::to_string(n_call));
-                w.w32(m_names.offset(calls.at(static_cast<int>(i)).s(call::KeyName)));
-                w.w32(static_cast<u32>(i * CallSize));
+                if (!g.v21)
+                    w.w32(m_names.offset(calls.at(static_cast<int>(i)).s(call::KeyName)));
+                w.w32(static_cast<u32>(i * g.call()));
             };
             const auto set_ref = [&](s64 i) { return i >= 0 ? static_cast<u32>(i * tset_bytes) : None32; };
             for (const auto& s : u.list(user::ActionSlots)) {
@@ -728,16 +879,19 @@ namespace xl::xlink_v19 {
             }
         }
 
-        Buffer V19Writer::run() {
+        Buffer EarlyWriter::run() {
             const NodeList& users = file.list(file::Users);
             const NodeList& up = file.list(file::UserParamDefs);
             const NodeList& ap = file.list(file::AssetParamDefs);
             const NodeList& tp = file.list(file::TriggerParamDefs);
-            n_sets_bytes = 8 * u64(ap.size());
+            n_sets_bytes = g.param() * u64(ap.size());
+            if (!g.v21
+                && (!file.list(file::LocalPropertyNames).empty() || !file.list(file::LocalPropertyEnumNames).empty()))
+                throw Error("version 19 has no local property names; convert the database first");
 
-            w.zeros(HeaderSize);
-            const std::size_t offsets = w.pos();
-            w.zeros(4 * u64(users.size()));
+            w.zeros(g.header());
+            const std::size_t entries = w.pos();
+            w.zeros(g.user_entry() * u64(users.size()));
             for (const NodeList* l : { &up, &ap, &tp })
                 for (const auto& def : *l) {
                     w.w32(m_names.offset(def->s(pdef::Name)));
@@ -753,19 +907,9 @@ namespace xl::xlink_v19 {
             }
 
             // Every asset carries its full parameter array, in definition order.
-            const auto write_full = [&](const Node& set, const NodeList& defs) {
-                for (int k = 0; k < defs.size(); ++k) {
-                    const Node* found = nullptr;
-                    for (const auto& p : set.list(pset::Params))
-                        if (p->i(param::Def) == k) {
-                            found = p.get();
-                            break;
-                        }
-                    param(found, &defs.at(k), k);
-                }
-            };
             for (const auto& set : file.list(file::AssetParamSets))
-                write_full(*set, ap);
+                for (int k = 0; k < ap.size(); ++k)
+                    param_or_default(set->list(pset::Params), ap, k);
             for (const auto& set : file.list(file::TriggerParamSets)) {
                 u32 mask = 0;
                 for (const auto& p : set->list(pset::Params))
@@ -773,20 +917,32 @@ namespace xl::xlink_v19 {
                         mask |= 1u << p->i(param::Def);
                 w.w32(mask);
                 for (int k = 0; k < tp.size(); ++k) {
-                    const Node* found = nullptr;
-                    for (const auto& p : set->list(pset::Params))
-                        if (p->i(param::Def) == k) {
-                            found = p.get();
-                            break;
-                        }
-                    if (found) {
-                        param(found, &tp.at(k), k);
-                    } else {
-                        w.w32(0);
-                        w.w32(0);
-                    }
+                    if (const Node* found = find_param(set->list(pset::Params), k))
+                        param(*found);
+                    else
+                        w.zeros(g.param());
                 }
             }
+            for (const int l : { file::LocalPropertyNames, file::LocalPropertyEnumNames })
+                for (const auto& n : file.list(l))
+                    w.w32(m_names.offset(n->s(name::Name)));
+
+            // Version 21 users can add direct values, so they are serialized before
+            // the direct value table is written.
+            Writer users_out(d.endian);
+            std::vector<u64> user_rel;
+            const auto write_users = [&] {
+                std::swap(w, users_out);
+                for (const auto& u : users) {
+                    user_rel.push_back(w.pos());
+                    write_user(*u);
+                }
+                std::swap(w, users_out);
+            };
+            if (g.v21)
+                write_users();
+            for (const u32 v : m_direct.values())
+                w.w32(v);
             for (const auto& rnd : file.list(file::Randoms)) {
                 w.w32(static_cast<u32>(rnd->i(random::Min)));
                 w.w32(static_cast<u32>(rnd->i(random::Max)));
@@ -800,6 +956,10 @@ namespace xl::xlink_v19 {
                 w.w16(static_cast<u16>(c->i(curve::IsPropGlobal)));
                 w.w32(m_names.offset(c->s(curve::PropName)));
                 w.ws32(static_cast<s32>(c->i(curve::PropIdx)));
+                if (g.v21) {
+                    w.ws16(static_cast<s16>(c->i(curve::LocalPropertyNameIdx)));
+                    w.ws16(static_cast<s16>(c->i(curve::UpdateType)));
+                }
                 point_index += count;
             }
             for (const auto& c : file.list(file::Curves))
@@ -818,9 +978,15 @@ namespace xl::xlink_v19 {
                     w.w8(static_cast<u8>(e->i(arrange_entry::Pad)));
                 }
             }
-            for (int k = 0; k < users.size(); ++k) {
-                w.patch_u32(offsets + 4 * k, static_cast<u32>(w.pos()));
-                write_user(users.at(k));
+            if (!g.v21)
+                write_users();
+            const std::size_t users_at = w.pos();
+            w.bytes(Bytes(users_out.buffer()));
+            for (std::size_t k = 0; k < user_rel.size(); ++k) {
+                const std::size_t e = entries + g.user_entry() * k;
+                w.patch_u32(e, static_cast<u32>(users_at + user_rel[k]));
+                if (g.v21)
+                    w.patch_u32(e + 4, m_names.offset(users.at(static_cast<int>(k)).s(user::Name)));
             }
             const std::size_t conditions = w.pos();
             w.bytes(std::string_view(m_cond_pool));
@@ -828,16 +994,28 @@ namespace xl::xlink_v19 {
             w.bytes(m_names.bytes());
             w.align(4);
 
-            u64 n_res = 0;
-            n_res = u64(file.list(file::AssetParamSets).size()) * ap.size();
-            const u32 header[16] = { 0, static_cast<u32>(w.pos()), static_cast<u32>(file.i(file::Version)),
-                static_cast<u32>(up.size()), static_cast<u32>(ap.size()),
-                static_cast<u32>(file.i(file::NumCustomAssetParam)), static_cast<u32>(tp.size()),
-                static_cast<u32>(n_res), static_cast<u32>(file.list(file::TriggerParamSets).size()),
-                static_cast<u32>(file.list(file::Randoms).size()), static_cast<u32>(file.list(file::Curves).size()),
-                static_cast<u32>(point_index), static_cast<u32>(users.size()), static_cast<u32>(conditions),
-                static_cast<u32>(ex), static_cast<u32>(names) };
-            for (int k = 1; k < 16; ++k)
+            const u32 n_res = static_cast<u32>(u64(file.list(file::AssetParamSets).size()) * ap.size());
+            std::vector<u32> header
+                = { 0, static_cast<u32>(w.pos()), static_cast<u32>(file.i(file::Version)), static_cast<u32>(up.size()),
+                      static_cast<u32>(ap.size()), static_cast<u32>(file.i(file::NumCustomAssetParam)),
+                      static_cast<u32>(tp.size()), n_res, static_cast<u32>(file.list(file::TriggerParamSets).size()) };
+            if (g.v21)
+                header.insert(header.end(),
+                    { static_cast<u32>(file.list(file::LocalPropertyNames).size()),
+                        static_cast<u32>(file.list(file::LocalPropertyEnumNames).size()),
+                        static_cast<u32>(m_direct.values().size()) });
+            header.insert(header.end(),
+                { static_cast<u32>(file.list(file::Randoms).size()), static_cast<u32>(file.list(file::Curves).size()),
+                    static_cast<u32>(point_index) });
+            if (g.v21)
+                header.insert(header.end(),
+                    { static_cast<u32>(ex), static_cast<u32>(users.size()), static_cast<u32>(conditions),
+                        static_cast<u32>(names) });
+            else
+                header.insert(header.end(),
+                    { static_cast<u32>(users.size()), static_cast<u32>(conditions), static_cast<u32>(ex),
+                        static_cast<u32>(names) });
+            for (std::size_t k = 1; k < header.size(); ++k)
                 w.patch_u32(4 * k, header[k]);
             std::copy_n("XLNK", 4, w.buffer().begin());
             return std::move(w.buffer());
@@ -845,8 +1023,12 @@ namespace xl::xlink_v19 {
 
     } // namespace
 
-    Document read(Bytes data) { return V19Reader(data).run(); }
+    bool is_early(u32 version) { return version == 19 || version == 21; }
 
-    Buffer write(const Document& doc) { return V19Writer(doc).run(); }
+    bool has_call_guid(u32 version) { return version != 21; }
 
-} // namespace xl::xlink_v19
+    Document read(Bytes data) { return EarlyReader(data).run(); }
+
+    Buffer write(const Document& doc) { return EarlyWriter(doc).run(); }
+
+} // namespace xl::xlink_early

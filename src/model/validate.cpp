@@ -79,6 +79,7 @@ namespace xl {
             const Node& file = *doc.root;
             const u32 v = doc.version();
             const bool v19 = v == 19, wide = !v19 && xlink_modern::is_wide(v, xlink_system(doc.format));
+            const bool early = xlink_early::is_early(v);
             const bool jumps = !v19 && xlink_modern::has_global_count(v, xlink_system(doc.format));
 
             const auto check_params = [&](const Node& holder, int list, const NodeList& defs, bool full) {
@@ -128,11 +129,12 @@ namespace xl {
             for (const auto& up : file.list(file::Users)) {
                 const Node& u = *up;
                 check_params(u, user::UserParams, file.list(file::UserParamDefs), true);
-                if (v19 && u.s(user::Name).empty())
-                    add(Severity::Error, &u, where(u) + ": version 19 finds users by name, and this one has none");
+                if (early && u.s(user::Name).empty())
+                    add(Severity::Error, &u,
+                        where(u) + ": version " + std::to_string(v) + " finds users by name, and this one has none");
                 if (!u.s(user::Name).empty() && !names.emplace(u.s(user::Name), &u).second)
                     add(Severity::Warning, &u, where(u) + ": another user has the same name");
-                if (!v19) {
+                if (!early) {
                     const u32 h = u.s(user::Name).empty() ? static_cast<u32>(u.i(user::Hash)) : 0;
                     if (h && !hashes.emplace(h, &u).second)
                         add(Severity::Error, &u, where(u) + ": another user has the same hash " + hex(h, 8));
@@ -173,12 +175,12 @@ namespace xl {
                                     : type;
                                 const auto random = [](s64 t) { return t == CT_Random || t == CT_Random2; };
                                 if (made_for != type)
-                                    // Version 19 conditions carry no type and are read as their
-                                    // container's, so a mismatch cannot be stored there. Shipped
+                                    // Version 19 and 21 conditions carry no type and are read as
+                                    // their container's, so a mismatch cannot be stored there. Shipped
                                     // databases give blend and sequence children other containers'
                                     // conditions, and mix the two random kinds, whose conditions
                                     // share one layout.
-                                    add(v19 ? Severity::Error
+                                    add(early ? Severity::Error
                                             : (type == CT_Blend || type == CT_Sequence
                                                   || (random(type) && random(made_for)))
                                             ? Severity::Information

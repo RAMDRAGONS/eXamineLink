@@ -8,6 +8,7 @@
 #include "formats/codecs.hpp"
 #include "model/elink0_schema.hpp"
 #include "model/eslink_schema.hpp"
+#include "model/guid.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
 
@@ -63,6 +64,7 @@ namespace xl {
             Node& file = *d.root;
             const u32 from = src.version();
             const bool from_v19 = from == 19, to_v19 = t.version == 19;
+            const bool from_early = xlink_early::is_early(from), to_early = xlink_early::is_early(t.version);
             const bool to_wide = !to_v19 && xlink_modern::is_wide(t.version, xlink_system(src.format));
 
             // Tables kept from the original layout only fit that layout.
@@ -88,28 +90,32 @@ namespace xl {
                     wide_ids += c->i(call::AssetId) < -0x8000 || c->i(call::AssetId) > 0x7FFF;
             }
 
-            if (to_v19) {
+            // Versions 19 and 21 find users by name and store no parameter defaults.
+            const std::string to_name = "version " + std::to_string(t.version);
+            if (to_early) {
                 if (unnamed)
                     losses.push_back(count_text(unnamed,
-                        "users have only a hash; version 19 finds users by name, so they are "
-                        "named after their hash"));
+                        "users have only a hash; " + to_name
+                            + " finds users by name, so they are named after their hash"));
                 for (auto& u : file.list(file::Users))
                     if (u->s(user::Name).empty())
                         u->set_s(user::Name, from_utf8(hex(static_cast<u32>(u->i(user::Hash)), 8), d.encoding));
-                if (local_props)
-                    losses.push_back(count_text(local_props, "local property names dropped (version 19 has none)"));
-                file.list(file::LocalPropertyNames).clear();
-                file.list(file::LocalPropertyEnumNames).clear();
-                for (auto& u : file.list(file::Users))
-                    u->list(user::LocalProperties).clear();
                 std::size_t defaults = 0;
                 for (const int l : { file::UserParamDefs, file::AssetParamDefs, file::TriggerParamDefs })
                     for (auto& def : file.list(l))
                         defaults += def->i(pdef::Default) != 0 || !def->s(pdef::Default).empty();
                 if (defaults)
                     losses.push_back(count_text(defaults,
-                        "parameter defaults are not stored by version 19; parameters an asset "
-                        "leaves unset are written out with them instead"));
+                        "parameter defaults are not stored by " + to_name
+                            + "; parameters an asset leaves unset are written out with them instead"));
+            }
+            if (to_v19) {
+                if (local_props)
+                    losses.push_back(count_text(local_props, "local property names dropped (version 19 has none)"));
+                file.list(file::LocalPropertyNames).clear();
+                file.list(file::LocalPropertyEnumNames).clear();
+                for (auto& u : file.list(file::Users))
+                    u->list(user::LocalProperties).clear();
                 std::size_t switch_extra = 0, blend_extra = 0, new_refs = 0;
                 for (auto& c : file.list(file::Conditions)) {
                     if (c->i(cond::ParentType) == CT_Switch)
@@ -128,6 +134,13 @@ namespace xl {
                     losses.push_back(count_text(blend_extra, "blend conditions keep only their minimum"));
                 if (new_refs)
                     losses.push_back(count_text(new_refs, "parameters use reference types newer than version 19"));
+            } else if (to_early) {
+                std::size_t blend_types = 0;
+                for (auto& c : file.list(file::Conditions))
+                    blend_types += c->i(cond::ParentType) == CT_Blend
+                        && (c->i(cond::BlendTypeToMax) || c->i(cond::BlendTypeToMin));
+                if (blend_types)
+                    losses.push_back(count_text(blend_types, "blend conditions lose their blend types"));
             }
             if (!to_v19 && !xlink_modern::has_user_locals(t.version, xlink_system(src.format))) {
                 std::size_t user_locals = 0;
@@ -142,14 +155,36 @@ namespace xl {
             }
             if (from_v19 && !to_v19) {
                 if (based)
-                    losses.push_back(count_text(based, "users name a base user, which later versions do not store"));
-                for (auto& u : file.list(file::Users)) {
+                    losses.push_back(count_text(based, "users name a base user, which " + to_name + " does not store"));
+                for (auto& u : file.list(file::Users))
                     u->set_s(user::BaseName, { });
-                    for (auto& c : u->list(user::Calls))
-                        c->set_i(call::KeyNameHash, crc32(c->s(call::KeyName)));
-                }
                 if (wide_ids)
                     losses.push_back(count_text(wide_ids, "asset ids do not fit 16 bits and wrap"));
+            }
+            if (from_early && !to_early)
+                for (auto& u : file.list(file::Users))
+                    for (auto& c : u->list(user::Calls))
+                        c->set_i(call::KeyNameHash, crc32(c->s(call::KeyName)));
+            // Version 21 calls carry no guid; other versions get ones derived from the
+            // user and call names, apart from the guids the user's triggers hold.
+            if (!xlink_early::has_call_guid(from) && xlink_early::has_call_guid(t.version))
+                for (auto& u : file.list(file::Users)) {
+                    GuidSource guids(u->s(user::Name));
+                    for (const auto& [l, f] : { std::pair { int { user::ActionTriggers }, int { atrig::Guid } },
+                             std::pair { int { user::PropertyTriggers }, int { ptrig::Guid } },
+                             std::pair { int { user::AlwaysTriggers }, int { awtrig::Guid } } })
+                        for (const auto& tr : u->list(l))
+                            guids.reserve(static_cast<u32>(tr->i(f)));
+                    for (auto& c : u->list(user::Calls))
+                        c->set_i(call::Guid, guids.next(c->s(call::KeyName) + "#" + std::to_string(c->row())));
+                }
+            if (xlink_early::has_call_guid(from) && !xlink_early::has_call_guid(t.version)) {
+                std::size_t guids = 0;
+                for (auto& u : file.list(file::Users))
+                    for (auto& c : u->list(user::Calls))
+                        guids += c->i(call::Guid) != 0;
+                if (guids)
+                    losses.push_back(count_text(guids, "call guids are not stored by " + to_name));
             }
             // Versions with a global property count get the one Nintendo's tools
             // would write; the source's own is kept when it has one.
@@ -438,15 +473,78 @@ namespace xl {
                     bytes.begin() + static_cast<std::ptrdiff_t>(k + width));
         }
 
+        // Field widths of a condition as versions 19 and 21 store it.
+        std::vector<std::size_t> condition_fields(const Node& c, bool v21) {
+            using namespace xlink;
+            switch (c.i(cond::ParentType)) {
+            case CT_Switch:
+                return v21 ? std::vector<std::size_t> { 4, 4, 4, 2, 1, 1 } : std::vector<std::size_t> { 4, 4, 4 };
+            case CT_Blend:
+                return v21 ? std::vector<std::size_t> { 4, 4 } : std::vector<std::size_t> { 4 };
+            default:
+                return { 4 };
+            }
+        }
+
+        // Conditions share byte runs and version 21 mixes field widths, so the pool
+        // is swapped field by field where its conditions say what lies there and as
+        // words elsewhere. Runs read with two different layouts cannot be swapped;
+        // the pool is then dropped and rebuilt on save.
+        void swap_condition_pool(Node& file, bool v21) {
+            using namespace xlink;
+            std::string pool = file.s(file::ConditionPool);
+            // Start of the field each byte belongs to, and that field's width.
+            std::vector<std::size_t> start(pool.size(), std::string::npos), width(pool.size(), 0);
+            bool clash = false;
+            for (const auto& c : file.list(file::Conditions)) {
+                const s64 off = c->i(cond::PoolOffset);
+                if (off < 0)
+                    continue;
+                std::size_t at = static_cast<std::size_t>(off);
+                for (const std::size_t n : condition_fields(*c, v21)) {
+                    for (std::size_t k = 0; k < n && !clash; ++k) {
+                        if (at + k >= pool.size())
+                            break;
+                        clash = (start[at + k] != std::string::npos && start[at + k] != at)
+                            || (width[at + k] && width[at + k] != n);
+                        start[at + k] = at;
+                        width[at + k] = n;
+                    }
+                    at += n;
+                }
+            }
+            if (clash) {
+                file.set_s(file::ConditionPool, { });
+                for (auto& c : file.list(file::Conditions))
+                    c->set_i(cond::PoolOffset, -1);
+                return;
+            }
+            for (std::size_t at = 0; at < pool.size();) {
+                std::size_t n = width[at];
+                if (!n) {
+                    // Bytes no condition reads: whole words where they fit.
+                    n = at % 4 == 0 && at + 4 <= pool.size()
+                            && std::all_of(width.begin() + static_cast<std::ptrdiff_t>(at),
+                                width.begin() + static_cast<std::ptrdiff_t>(at + 4), [](std::size_t v) { return !v; })
+                        ? 4
+                        : 1;
+                }
+                n = std::min(n, pool.size() - at);
+                std::reverse(
+                    pool.begin() + static_cast<std::ptrdiff_t>(at), pool.begin() + static_cast<std::ptrdiff_t>(at + n));
+                at += n;
+            }
+            file.set_s(file::ConditionPool, pool);
+        }
+
         void swap_raw_pools(Document& d) {
             if (!is_xlink(d.format))
                 return;
             Node& file = *d.root;
-            for (const int f : { xlink::file::DirectValuePool, xlink::file::ConditionPool }) {
-                std::string pool = file.s(f);
-                swap_words(pool, 4);
-                file.set_s(f, pool);
-            }
+            std::string direct = file.s(xlink::file::DirectValuePool);
+            swap_words(direct, 4);
+            file.set_s(xlink::file::DirectValuePool, direct);
+            swap_condition_pool(file, d.version() == 21);
             for (auto& u : file.list(xlink::file::Users)) {
                 std::string order = u->s(xlink::user::SortedCallOrder);
                 swap_words(order, 2);

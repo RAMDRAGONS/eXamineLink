@@ -13,6 +13,7 @@
 #include "model/convert.hpp"
 #include "model/eslink_schema.hpp"
 #include "model/factory.hpp"
+#include "model/guid.hpp"
 #include "model/xlink_schema.hpp"
 
 namespace xl {
@@ -56,24 +57,6 @@ namespace xl {
                     return k;
             return -1;
         }
-
-        // Guids only need to differ within a user; deriving them from names keeps
-        // an import reproducible.
-        class GuidSource {
-        public:
-            explicit GuidSource(std::string user)
-                : m_user(std::move(user)) { }
-            u32 next(const std::string& what) {
-                u32 g = crc32(m_user + ":" + what) & 0x7FFFFFFF;
-                while (g == 0 || !m_used.insert(g).second)
-                    g = (g * 1103515245u + 12345u) & 0x7FFFFFFF;
-                return g;
-            }
-
-        private:
-            std::string m_user;
-            std::set<u32> m_used;
-        };
 
         // Values of `field` across `nodes`, most frequent first.
         s64 most_common(const std::vector<const Node*>& nodes, int field, s64 fallback) {
