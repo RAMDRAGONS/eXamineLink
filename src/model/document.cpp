@@ -95,7 +95,7 @@ namespace xl {
             { "thunder", "Splatoon 3", F::ELink2, 34, Little, Utf8 },
             { "ex-king",
                 "The Legend of Zelda: Tears of the Kingdom, Splatoon Raiders, "
-                "Nintendo Switch Sports Resort, Mario Kart World",
+                "Nintendo Switch Sports Resort, Mario Kart World, Donkey Kong Bananza",
                 F::ELink2, 36, Little, Utf8 },
             // Sounds.
             { "lounge", "Animal Crossing Plaza", F::SLink, 50, Big, Sjis },
@@ -112,8 +112,8 @@ namespace xl {
             { "park", "Animal Crossing: New Horizons", F::SLink2, 29, Little, Utf8 },
             { "thunder", "Splatoon 3", F::SLink2, 31, Little, Utf8 },
             { "ex-king", "The Legend of Zelda: Tears of the Kingdom", F::SLink2, 33, Little, Utf8 },
-            { "spiral", "Splatoon Raiders, Nintendo Switch Sports Resort, Mario Kart World", F::SLink2, 34, Little,
-                Utf8 },
+            { "spiral", "Splatoon Raiders, Nintendo Switch Sports Resort, Mario Kart World, Donkey Kong Bananza",
+                F::SLink2, 34, Little, Utf8 },
         };
         return p;
     }

@@ -422,5 +422,5 @@ with an identical set, or its most common one.
 XLink 27 to 36 other than
 27 to 31, 33, 34 and 36 open with the layout of their width and save as
 their own version. ELink2 36 pairs with SLink2 33 in Tears of the Kingdom
-and with SLink2 34 in Splatoon Raiders, Nintendo Switch Sports Resort and
-Mario Kart World, which share one layout.
+and with SLink2 34 in Splatoon Raiders, Nintendo Switch Sports Resort,
+Mario Kart World and Donkey Kong Bananza, which share one layout.
