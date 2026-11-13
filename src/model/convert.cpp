@@ -6,7 +6,7 @@
 
 #include "core/crc32.hpp"
 #include "formats/codecs.hpp"
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/elink0_schema.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
@@ -53,9 +53,9 @@ namespace xl {
                 file.set_s(elink0::file::StringPool, { });
                 return;
             }
-            file.set_s(dslink::file::StringPool, { });
-            for (auto& u : file.list(dslink::file::Users))
-                u->set_s(dslink::user::StringPool, { });
+            file.set_s(eslink::file::StringPool, { });
+            for (auto& u : file.list(eslink::file::Users))
+                u->set_s(eslink::user::StringPool, { });
         }
 
         void convert_xlink(Document& d, const Document& src, const Target& t, std::vector<std::string>& losses) {
@@ -185,7 +185,7 @@ namespace xl {
 
         const Node* find_user(const NodeList& users, const std::string& name) {
             for (const auto& u : users)
-                if (u->s(dslink::user::Name) == name && u->i(dslink::user::Type) == dslink::UT_User)
+                if (u->s(eslink::user::Name) == name && u->i(eslink::user::Type) == eslink::UT_User)
                     return u.get();
             return nullptr;
         }
@@ -223,7 +223,7 @@ namespace xl {
         // (3DS). The Wii U versions have no shared pools, aliases or base users, so
         // those are expanded into each user going there.
         void convert_old_link(Document& d, const Document& src, const Target& t, std::vector<std::string>& losses) {
-            using namespace dslink;
+            using namespace eslink;
             const bool effect = d.format == Format::ELink;
             const bool to_wiiu = t.version == 9 || t.version == 69;
             const s64 kind = effect ? t.version : 1;

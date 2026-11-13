@@ -34,7 +34,7 @@
 #include "core/crc32.hpp"
 #include "model/bridge.hpp"
 #include "model/convert.hpp"
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/elink0_schema.hpp"
 #include "model/factory.hpp"
 #include "model/xlink_schema.hpp"
@@ -108,7 +108,7 @@ namespace {
                 return { { QObject::tr("Unlisted Records"), { file::UnlistedRecords } } };
             return { { QObject::tr("Records"), { user::Records } } };
         }
-        using namespace dslink;
+        using namespace eslink;
         if (root)
             return { { QObject::tr("Shared Assets"), { file::SharedAssets } },
                 { QObject::tr("Shared Triggers"), { file::SharedTriggers } } };

@@ -1,8 +1,8 @@
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 
 #include <cstdio>
 
-namespace xl::dslink {
+namespace xl::eslink {
 
     const std::vector<std::string> UserTypeNames = { "User", "Alias", "Empty" };
 
@@ -305,4 +305,4 @@ namespace xl::dslink {
         return n.i(user::PooledTriggers) ? &n.list(user::TriggerRefs) : &n.list(user::Triggers);
     }
 
-} // namespace xl::dslink
+} // namespace xl::eslink

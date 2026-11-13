@@ -21,7 +21,7 @@
 #include "model/bridge.hpp"
 #include "model/convert.hpp"
 #include "model/document.hpp"
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/edit.hpp"
 #include "model/validate.hpp"
 #include "model/value_text.hpp"
@@ -697,7 +697,7 @@ namespace {
     // between `a` and the same users in `b`: the record each call table picks for
     // every combination of condition values, and each action's triggers.
     std::vector<std::string> playback_differences(const Document& a, const Document& b) {
-        using namespace dslink;
+        using namespace eslink;
         const bool sound = a.format == Format::SLink;
         const FamilySchemas& fa = *family_of(*a.root);
         const FamilySchemas& fb = *family_of(*b.root);

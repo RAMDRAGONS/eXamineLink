@@ -11,7 +11,7 @@
 #include "core/text.hpp"
 #include "formats/codecs.hpp"
 #include "model/convert.hpp"
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/factory.hpp"
 #include "model/xlink_schema.hpp"
 
@@ -20,7 +20,7 @@ namespace xl {
     namespace {
 
         namespace X = xlink;
-        namespace D = dslink;
+        namespace D = eslink;
 
         constexpr s32 Forever = INT_MAX;
 

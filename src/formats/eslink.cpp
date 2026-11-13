@@ -2,7 +2,7 @@
 
 #include "formats/codecs.hpp"
 #include "formats/string_pool.hpp"
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 
 // EffectLink and SoundLink databases, the link libraries before XLink.
 //
@@ -18,9 +18,9 @@
 // EffectLink 10 and SoundLink 73 (3DS) put effects/assets and action triggers
 // into pools shared by every user; a user lists pool indices and stores a -1
 // marker in place of its own copies. Users can also alias another user.
-namespace xl::dslink_codec {
+namespace xl::eslink_codec {
 
-    using namespace dslink;
+    using namespace eslink;
 
     namespace {
 
@@ -623,4 +623,4 @@ namespace xl::dslink_codec {
 
     Buffer write(const Document& doc) { return LinkWriter(doc).run(); }
 
-} // namespace xl::dslink_codec
+} // namespace xl::eslink_codec

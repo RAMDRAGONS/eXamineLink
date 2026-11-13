@@ -9,7 +9,7 @@
 
 #include "codec/zstd.hpp"
 #include "formats/codecs.hpp"
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/xlink_schema.hpp"
 
 namespace xl {
@@ -165,8 +165,8 @@ namespace xl {
     bool stores_field(const Document& doc, const Schema& s, int field) {
         using namespace xlink;
         // SoundLink 73 users have no distance settings.
-        if (doc.format == Format::SLink && doc.version() == 73 && &s == &dslink::sound_link(73).user)
-            return field < dslink::user::Header1 || field > dslink::user::Header4;
+        if (doc.format == Format::SLink && doc.version() == 73 && &s == &eslink::sound_link(73).user)
+            return field < eslink::user::Header1 || field > eslink::user::Header4;
         if (is_xlink(doc.format) && &s == &schemas().user && field == user::GlobalPropertyCount)
             return doc.version() != 19 && xlink_modern::has_global_count(doc.version(), xlink_system(doc.format));
         if (!narrow_xlink(doc))
@@ -244,7 +244,7 @@ namespace xl {
             throw Error("XLink resource version " + std::to_string(version) + " is not supported");
         }
         if (r.magic_at(0, "eflk") || r.magic_at(0, "SLNK"))
-            return dslink_codec::read(payload);
+            return eslink_codec::read(payload);
         if (r.magic_at(0, "BLNK"))
             return elink0_codec::read(payload);
         throw Error("not a link database (XLNK, eflk, SLNK or BLNK)");
@@ -262,7 +262,7 @@ namespace xl {
             throw Error("XLink resource version " + std::to_string(v) + " cannot be written");
         case Format::ELink:
         case Format::SLink:
-            return dslink_codec::write(doc);
+            return eslink_codec::write(doc);
         case Format::ELink0:
             return elink0_codec::write(doc);
         }

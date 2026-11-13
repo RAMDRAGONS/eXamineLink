@@ -35,10 +35,10 @@ namespace xl {
     } // namespace elink0_codec
 
     // EffectLink 9 and 10, SoundLink 69 and 73.
-    namespace dslink_codec {
+    namespace eslink_codec {
         Document read(Bytes data);
         Buffer write(const Document& doc);
-    } // namespace dslink_codec
+    } // namespace eslink_codec
 
     // Shift-JIS when any non-ASCII string fails to decode as UTF-8.
     Encoding detect_encoding(std::string_view string_table, Encoding fallback);

@@ -4,7 +4,7 @@
 #include <set>
 
 #include "core/crc32.hpp"
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/elink0_schema.hpp"
 #include "model/xlink_schema.hpp"
 
@@ -113,7 +113,7 @@ namespace xl {
             return n;
         }
 
-        using namespace dslink;
+        using namespace eslink;
         const FamilySchemas* fs = family_of(*doc.root);
         if (!fs)
             return n;

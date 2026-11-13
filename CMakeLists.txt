@@ -42,7 +42,7 @@ add_library(xl_core STATIC
   src/codec/layers.cpp
   src/model/node.cpp
   src/model/xlink_schema.cpp
-  src/model/dslink_schema.cpp
+  src/model/eslink_schema.cpp
   src/model/elink0_schema.cpp
   src/model/document.cpp
   src/model/edit.cpp
@@ -55,7 +55,7 @@ add_library(xl_core STATIC
   src/formats/string_pool.cpp
   src/formats/xlink_v19.cpp
   src/formats/xlink_modern.cpp
-  src/formats/dslink.cpp
+  src/formats/eslink.cpp
   src/formats/elink0.cpp
 )
 target_include_directories(xl_core PUBLIC src)

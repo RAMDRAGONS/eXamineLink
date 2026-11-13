@@ -6,7 +6,7 @@
 // databases that came before XLink: per user, call tables naming effects or
 // sound assets, actions and their triggers, all of them fixed-size records.
 // 3DS versions move assets and action triggers into pools shared by users.
-namespace xl::dslink {
+namespace xl::eslink {
 
     enum class Family { EffectLink, SoundLink };
 
@@ -103,4 +103,4 @@ namespace xl::dslink {
     NodeList* asset_list_of(const Node& user);
     NodeList* trigger_list_of(const Node& user);
 
-} // namespace xl::dslink
+} // namespace xl::eslink

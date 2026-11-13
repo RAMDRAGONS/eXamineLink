@@ -4,7 +4,7 @@
 #include <set>
 
 #include "formats/codecs.hpp"
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/elink0_schema.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
@@ -28,7 +28,7 @@ namespace xl {
 
             void references();
             void xlink();
-            void dslink();
+            void eslink();
             void elink0();
 
             const Document& doc;
@@ -214,8 +214,8 @@ namespace xl {
             }
         }
 
-        void Checker::dslink() {
-            using namespace dslink;
+        void Checker::eslink() {
+            using namespace eslink;
             const Node& file = *doc.root;
             const u32 v = doc.version();
             const bool pooled_version = v == 10 || v == 73;
@@ -306,7 +306,7 @@ namespace xl {
         else if (doc.format == Format::ELink0)
             c.elink0();
         else
-            c.dslink();
+            c.eslink();
         if (try_write) {
             try {
                 write_database(doc);

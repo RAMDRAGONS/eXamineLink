@@ -12,7 +12,7 @@
 #include <unordered_map>
 
 #include "model/convert.hpp"
-#include "model/dslink_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/elink0_schema.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
@@ -148,9 +148,9 @@ namespace xl::xml {
             case Format::SLink2:
                 return &xlink::schemas().file;
             case Format::ELink:
-                return &dslink::effect_link().file;
+                return &eslink::effect_link().file;
             case Format::SLink:
-                return &dslink::sound_link(version).file;
+                return &eslink::sound_link(version).file;
             case Format::ELink0:
                 return &elink0::schemas().file;
             }
