@@ -6,8 +6,8 @@ A Qt 6 editor for Nintendo EPD's sound and effect link formats, aiming for wide 
 | ---------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | XLink (`XLNK`, `.belnk`, `.bslnk`) | 19                                     | Splatoon (ELink2 v19, SLink2 v19)                                                                                                                                                                                                                                |
 |                                    | 21                                     | Super Mario Maker (ELink2 v21, SLink2 v21)                                                                                                                                                                                                                       |
-|                                    | 27 to 31, 32-bit                       | Mario Kart 8 Deluxe prototype (ELink2 v29, SLink2 v27); Splatoon 2, ARMS, Mario Kart 8 Deluxe, Game Builder Garage, The Legend of Zelda: Breath of the Wild on Wii U and Switch (ELink2 v30, SLink2 v28); Animal Crossing: New Horizons (ELink2 v31, SLink2 v29) |
-|                                    | 31 to 36, 64-bit                       | Splatoon 3 (ELink2 v34, SLink2 v31); The Legend of Zelda: Tears of the Kingdom (ELink2 v36, SLink2 v33); Splatoon Raiders, Nintendo Switch Sports Resort, Mario Kart World and Donkey Kong Bananza (ELink2 v36, SLink2 v34)                                      |
+|                                    | 27 to 31, 32-bit                       | Mario Kart 8 Deluxe prototype (ELink2 v29, SLink2 v27); The Legend of Zelda: Breath of the Wild on Wii U and Switch, Mario Kart 8 Deluxe, ARMS, Splatoon 2, Game Builder Garage (ELink2 v30, SLink2 v28); Animal Crossing: New Horizons (ELink2 v31, SLink2 v29) |
+|                                    | 31 to 36, 64-bit                       | Splatoon 3 (ELink2 v34, SLink2 v31); The Legend of Zelda: Tears of the Kingdom (ELink2 v36, SLink2 v33); Mario Kart World, Donkey Kong Bananza, Splatoon Raiders and Nintendo Switch Sports Resort (ELink2 v36, SLink2 v34)                                      |
 | ELink (`eflk`)                     | 9                                      | Mario Kart 8                                                                                                                                                                                                                                                     |
 |                                    | 10 (shared pools)                      | Animal Crossing: Happy Home Designer                                                                                                                                                                                                                             |
 | SLink (`SLNK`)                     | 50                                     | Animal Crossing Plaza                                                                                                                                                                                                                                            |
@@ -114,10 +114,10 @@ Effect presets:
 | `turbo-s-proto` | Mario Kart 8 Deluxe prototype                                                                                                     | ELink2 29 | little     | Shift-JIS |
 | `u-king`        | The Legend of Zelda: Breath of the Wild (Wii U)                                                                                   | ELink2 30 | big        | UTF-8     |
 | `u-king-s`      | The Legend of Zelda: Breath of the Wild (Switch), Game Builder Garage                                                             | ELink2 30 | little     | UTF-8     |
-| `blitz`         | Splatoon 2, ARMS, Mario Kart 8 Deluxe                                                                                             | ELink2 30 | little     | Shift-JIS |
+| `turbo-s`       | Mario Kart 8 Deluxe, ARMS, Splatoon 2                                                                                             | ELink2 30 | little     | Shift-JIS |
 | `park`          | Animal Crossing: New Horizons                                                                                                     | ELink2 31 | little     | UTF-8     |
 | `thunder`       | Splatoon 3                                                                                                                        | ELink2 34 | little     | UTF-8     |
-| `ex-king`       | The Legend of Zelda: Tears of the Kingdom, Splatoon Raiders, Nintendo Switch Sports Resort, Mario Kart World, Donkey Kong Bananza | ELink2 36 | little     | UTF-8     |
+| `ex-king`       | The Legend of Zelda: Tears of the Kingdom, Mario Kart World, Donkey Kong Bananza, Splatoon Raiders, Nintendo Switch Sports Resort | ELink2 36 | little     | UTF-8     |
 
 Sound presets:
 
@@ -132,11 +132,11 @@ Sound presets:
 | `turbo-s-proto` | Mario Kart 8 Deluxe prototype                                                          | SLink2 27 | little     | Shift-JIS |
 | `u-king`        | The Legend of Zelda: Breath of the Wild (Wii U)                                        | SLink2 28 | big        | UTF-8     |
 | `u-king-s`      | The Legend of Zelda: Breath of the Wild (Switch), Game Builder Garage                  | SLink2 28 | little     | UTF-8     |
-| `blitz`         | Splatoon 2, ARMS, Mario Kart 8 Deluxe                                                  | SLink2 28 | little     | Shift-JIS |
+| `turbo-s`       | Mario Kart 8 Deluxe, ARMS, Splatoon 2                                                  | SLink2 28 | little     | Shift-JIS |
 | `park`          | Animal Crossing: New Horizons                                                          | SLink2 29 | little     | UTF-8     |
 | `thunder`       | Splatoon 3                                                                             | SLink2 31 | little     | UTF-8     |
 | `ex-king`       | The Legend of Zelda: Tears of the Kingdom                                              | SLink2 33 | little     | UTF-8     |
-| `spiral`        | Splatoon Raiders, Nintendo Switch Sports Resort, Mario Kart World, Donkey Kong Bananza | SLink2 34 | little     | UTF-8     |
+| `drive`         | Mario Kart World, Donkey Kong Bananza, Splatoon Raiders, Nintendo Switch Sports Resort | SLink2 34 | little     | UTF-8     |
 
 The command line's `convert` takes a preset key, looked up among the presets
 of the database's own format.

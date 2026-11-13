@@ -90,12 +90,12 @@ namespace xl {
             { "u-king", "The Legend of Zelda: Breath of the Wild (Wii U)", F::ELink2, 30, Big, Utf8 },
             { "u-king-s", "The Legend of Zelda: Breath of the Wild (Switch), Game Builder Garage", F::ELink2, 30,
                 Little, Utf8 },
-            { "blitz", "Splatoon 2, ARMS, Mario Kart 8 Deluxe", F::ELink2, 30, Little, Sjis },
+            { "turbo-s", "Mario Kart 8 Deluxe, ARMS, Splatoon 2", F::ELink2, 30, Little, Sjis },
             { "park", "Animal Crossing: New Horizons", F::ELink2, 31, Little, Utf8 },
             { "thunder", "Splatoon 3", F::ELink2, 34, Little, Utf8 },
             { "ex-king",
-                "The Legend of Zelda: Tears of the Kingdom, Splatoon Raiders, "
-                "Nintendo Switch Sports Resort, Mario Kart World, Donkey Kong Bananza",
+                "The Legend of Zelda: Tears of the Kingdom, Mario Kart World, "
+                "Donkey Kong Bananza, Splatoon Raiders, Nintendo Switch Sports Resort",
                 F::ELink2, 36, Little, Utf8 },
             // Sounds.
             { "lounge", "Animal Crossing Plaza", F::SLink, 50, Big, Sjis },
@@ -108,11 +108,11 @@ namespace xl {
             { "u-king", "The Legend of Zelda: Breath of the Wild (Wii U)", F::SLink2, 28, Big, Utf8 },
             { "u-king-s", "The Legend of Zelda: Breath of the Wild (Switch), Game Builder Garage", F::SLink2, 28,
                 Little, Utf8 },
-            { "blitz", "Splatoon 2, ARMS, Mario Kart 8 Deluxe", F::SLink2, 28, Little, Sjis },
+            { "turbo-s", "Mario Kart 8 Deluxe, ARMS, Splatoon 2", F::SLink2, 28, Little, Sjis },
             { "park", "Animal Crossing: New Horizons", F::SLink2, 29, Little, Utf8 },
             { "thunder", "Splatoon 3", F::SLink2, 31, Little, Utf8 },
             { "ex-king", "The Legend of Zelda: Tears of the Kingdom", F::SLink2, 33, Little, Utf8 },
-            { "spiral", "Splatoon Raiders, Nintendo Switch Sports Resort, Mario Kart World, Donkey Kong Bananza",
+            { "drive", "Mario Kart World, Donkey Kong Bananza, Splatoon Raiders, Nintendo Switch Sports Resort",
                 F::SLink2, 34, Little, Utf8 },
         };
         return p;
