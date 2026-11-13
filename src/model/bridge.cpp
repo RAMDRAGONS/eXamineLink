@@ -391,7 +391,9 @@ namespace xl {
                 if (m_sound) {
                     const f32 interior = u.f32v(D::user::Header3);
                     const int d = def_index(defs(X::file::UserParamDefs), "InteriorSize");
-                    if (interior != 0 && d >= 0)
+                    if (interior != 0 && d < 0)
+                        ++m_missing_defs["InteriorSize"];
+                    else if (interior != 0)
                         for (auto& p : x.list(X::user::UserParams))
                             if (p->i(X::param::Def) == d)
                                 p->set_i(X::param::Value, f32_bits(interior));
