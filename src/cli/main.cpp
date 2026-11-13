@@ -298,17 +298,27 @@ namespace {
         const auto pick = [&rng](int n) { return std::uniform_int_distribution<int>(0, n - 1)(rng); };
         int ops = 0, serial = 0;
         for (int k = 0; k < count; ++k) {
+            const auto is_counted = [](const NodeList& l) {
+                const std::string& n = l.def().name;
+                return l.def().element == &xlink::schemas().param || n == "Params" || n == "Axis1" || n == "Axis2"
+                    || n == "Cells";
+            };
+            // No valid edit changes a counted list, so valid runs leave them out
+            // rather than spend their attempts on them; databases holding thousands
+            // of parameter sets would otherwise see few edits.
             std::vector<NodeList*> lists;
             walk(*doc.root, [&](Node& n) {
                 for (int l = 0; l < n.list_count(); ++l)
-                    lists.push_back(&n.list(l));
+                    if (!keep_valid || !is_counted(n.list(l)))
+                        lists.push_back(&n.list(l));
             });
+            if (lists.empty())
+                break;
             NodeList& list = *lists[pick(static_cast<int>(lists.size()))];
             const int size = list.size();
             const Schema* el = list.def().element;
             const std::string& lname = list.def().name;
-            const bool counted = el == &xlink::schemas().param || lname == "Params" || lname == "Axis1"
-                || lname == "Axis2" || lname == "Cells";
+            const bool counted = is_counted(list);
             // Games binary-search local property names, so these lists stay sorted
             // and free of repeats.
             const bool sorted = is_xlink(doc.format) && (lname == "LocalProperties" || lname == "LocalPropertyNames");
@@ -317,6 +327,11 @@ namespace {
                 continue;
             if (op == 0 && size > 0) {
                 if (keep_valid && counted)
+                    continue;
+                // Parameter masks hold 64 asset and 32 trigger definitions.
+                if (keep_valid && is_xlink(doc.format) && list.owner() == doc.root.get()
+                    && ((list.index() == xlink::file::AssetParamDefs && size >= 64)
+                        || (list.index() == xlink::file::TriggerParamDefs && size >= 32)))
                     continue;
                 const int src = pick(size);
                 auto copy = list.at(src).clone();
