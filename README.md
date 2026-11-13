@@ -1,6 +1,6 @@
 # eXamineLink
 
-A Qt 6 editor for Nintendo EPD's sound and effect link formats, aiming for wide version support and allowing conversion across them.
+A Qt 6 editor for Nintendo EPD's sound and effect link formats, aiming for wide version support, conversion between them, and exporting to intermediate XML format similar to what real EPD developers would have access to.
 
 | Format                             | Versions                               | Games checked                                                                                                                                                                                                                                                    |
 | ---------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
