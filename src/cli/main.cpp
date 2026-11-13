@@ -73,11 +73,13 @@ std::string summary(const Document& d) {
                   (d.encoding == Encoding::ShiftJis ? "Shift-JIS" : "UTF-8") + ", " + describe(d.layers);
   const NodeList& users = d.root->list(d.root->list_count() - 1);
   s += ", " + std::to_string(users.size()) + " users";
+  // A database alone cannot tell apart games that share its settings.
+  std::string as;
   for (const Preset& p : presets())
-    if (preset_version(p, d.format, d.system()) == d.version() && p.endian == d.endian && p.encoding == d.encoding) {
-      s += " (as " + p.name + ")";
-      break;
-    }
+    if (preset_version(p, d.format, d.system()) == d.version() && p.endian == d.endian && p.encoding == d.encoding)
+      as += (as.empty() ? "" : " or ") + p.name;
+  if (!as.empty())
+    s += " (as " + as + ")";
   return s;
 }
 

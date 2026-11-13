@@ -26,6 +26,7 @@ const std::vector<Version>& versions() {
       {Format::XLink, 31, "SLink2 v31 (64-bit)", 1},
       {Format::XLink, 33, "SLink2 v33 (64-bit)", 1},
       {Format::XLink, 34, "ELink2 v34 (64-bit)", 0},
+      {Format::XLink, 34, "SLink2 v34 (64-bit)", 1},
       {Format::XLink, 36, "ELink2 v36 (64-bit)", 0},
       {Format::EffectLink, 9, "EffectLink v9"},
       {Format::EffectLink, 10, "EffectLink v10 (shared pools)"},
@@ -65,6 +66,7 @@ const std::vector<Preset>& presets() {
       {"thunder", "Splatoon 3 (Switch)", Endian::Little, Encoding::Utf8, {{F::XLink, 34, 0}, {F::XLink, 31, 1}}},
       {"ex-king", "The Legend of Zelda: Tears of the Kingdom (Switch)", Endian::Little, Encoding::Utf8,
        {{F::XLink, 36, 0}, {F::XLink, 33, 1}}},
+      {"spiral", "Splatoon Raiders (Switch 2)", Endian::Little, Encoding::Utf8, {{F::XLink, 36, 0}, {F::XLink, 34, 1}}},
   };
   return p;
 }
@@ -121,6 +123,8 @@ bool stores_field(const Document& doc, const Schema& s, int field) {
   // SoundLink 73 users have no distance settings.
   if (doc.format == Format::SoundLink && doc.version() == 73 && &s == &dslink::sound_link(73).user)
     return field < dslink::user::Header1 || field > dslink::user::Header4;
+  if (doc.format == Format::XLink && &s == &schemas().user && field == user::GlobalPropertyCount)
+    return doc.version() != 19 && xlink_modern::has_global_count(doc.version(), doc.system());
   if (!narrow_xlink(doc))
     return true;
   if (&s == &schemas().ctn)

@@ -104,7 +104,7 @@ enum Field {
 constexpr s64 RefTableEnd = -2;
 
 namespace user {
-enum Field { Name, Hash, BaseName, SortedCallOrder };
+enum Field { Name, Hash, BaseName, SortedCallOrder, GlobalPropertyCount };
 enum List {
   LocalProperties,
   UserParams,

@@ -7,7 +7,7 @@ effects and sounds:
 | --- | --- | --- |
 | XLink (`XLNK`, `.belnk`, `.bslnk`) | 19 | Splatoon (Wii U) |
 | | 27 to 31, 32-bit | Mario Kart 8 Deluxe prototype (ELink2 v29, SLink2 v27); Splatoon 2, ARMS, Mario Kart 8 Deluxe, Game Builder Garage, The Legend of Zelda: Breath of the Wild on Wii U and Switch (ELink2 v30, SLink2 v28); Animal Crossing: New Horizons (ELink2 v31, SLink2 v29) |
-| | 31 to 36, 64-bit | Splatoon 3 (ELink2 v34, SLink2 v31); The Legend of Zelda: Tears of the Kingdom (ELink2 v36, SLink2 v33) |
+| | 31 to 36, 64-bit | Splatoon 3 (ELink2 v34, SLink2 v31); The Legend of Zelda: Tears of the Kingdom (ELink2 v36, SLink2 v33); Splatoon Raiders (ELink2 v36, SLink2 v34) |
 | EffectLink (`eflk`) | 9 | Mario Kart 8 (Wii U) |
 | | 10 (shared pools) | Animal Crossing: Happy Home Designer (3DS) |
 | SoundLink (`SLNK`) | 69 | Mario Kart 8 (Wii U), The Legend of Zelda: Tri Force Heroes (3DS) |
@@ -112,6 +112,7 @@ whose databases were checked:
 | `park` | Animal Crossing: New Horizons (Switch) | ELink2 31, SLink2 29 | little | UTF-8 |
 | `thunder` | Splatoon 3 (Switch) | ELink2 34, SLink2 31 | little | UTF-8 |
 | `ex-king` | The Legend of Zelda: Tears of the Kingdom (Switch) | ELink2 36, SLink2 33 | little | UTF-8 |
+| `spiral` | Splatoon Raiders (Switch 2) | ELink2 36, SLink2 34 | little | UTF-8 |
 
 Choosing a version by hand takes the byte order and encoding of a preset
 using it (of several, the one sharing the database's byte order, then its

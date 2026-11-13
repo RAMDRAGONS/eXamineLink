@@ -341,7 +341,10 @@ void build(Schemas& s) {
                          "Version 19 stores names; later versions keep only the hash, so names are optional there"),
                    field("Hash", FieldType::Hex32, "CRC-32 of the name, the key later versions look users up by"),
                    field("BaseName", FieldType::String, "User this one is based on (version 19)"),
-                   hidden_field("SortedCallOrder", FieldType::String)};
+                   hidden_field("SortedCallOrder", FieldType::String),
+                   field("GlobalPropertyCount", FieldType::U16,
+                         "Distinct global properties the user reads (ELink2 36, SLink2 33 and later); the game's "
+                         "loader does not read it, and shipped databases do not always match their contents")};
   s.user.lists = {{"LocalProperties", &s.name},       {"UserParams", &s.param},
                   {"Calls", &s.call},                 {"Containers", &s.ctn},
                   {"ActionSlots", &s.slot},           {"Actions", &s.action},

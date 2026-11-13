@@ -128,8 +128,14 @@ void Checker::xlink() {
       if (h && !hashes.emplace(h, &u).second)
         add(Severity::Error, &u, where(u) + ": another user has the same hash " + hex(h, 8));
     }
-    if (jumps)
+    if (jumps) {
       check_sorted(u, u.list(user::LocalProperties), "local properties");
+      const u16 globals = xlink_modern::global_property_count(file, u);
+      if (u.i(user::GlobalPropertyCount) != globals)
+        add(Severity::Information, &u,
+            where(u) + ": global property count is " + std::to_string(u.i(user::GlobalPropertyCount)) +
+                " where its contents read " + std::to_string(globals));
+    }
     const NodeList& calls = u.list(user::Calls);
     const NodeList& ctns = u.list(user::Containers);
     if (calls.size() > 0xFFFF)

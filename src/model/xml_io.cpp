@@ -641,12 +641,15 @@ void local_name_refs(Node& user, const std::function<Node*(int list, s64 id)>& s
   using namespace xlink;
   NodeList& calls = user.list(user::Calls);
   NodeList& ctns = user.list(user::Containers);
-  const auto action_switch = [&](const Node& call) {
+  // The container a call sits in, when that container is a switch.
+  const auto parent_switch = [&](const Node& call) -> const Node* {
     const s64 parent = call.i(call::ParentIndex);
     if (parent < 0 || parent >= calls.size())
-      return false;
+      return nullptr;
     const s64 c = calls.at(static_cast<int>(parent)).i(call::Container);
-    return c >= 0 && c < ctns.size() && ctns.at(static_cast<int>(c)).i(ctn::SwitchByte) != 0;
+    if (c < 0 || c >= ctns.size() || ctns.at(static_cast<int>(c)).i(ctn::Type) != CT_Switch)
+      return nullptr;
+    return &ctns.at(static_cast<int>(c));
   };
   for (auto& c : ctns) {
     if (c->i(ctn::SwitchByte) != 0)
@@ -656,20 +659,24 @@ void local_name_refs(Node& user, const std::function<Node*(int list, s64 id)>& s
     if (!c->s(ctn::WatchPropertyName2).empty() && c->i(ctn::LocalPropertyNameIdx2) >= 0)
       out.push_back({c.get(), ctn::WatchPropertyName2, ctn::LocalPropertyNameIdx2, false});
   }
-  // Conditions are shared; one that an action switch child uses holds an
-  // action hash for every call that shares it.
-  std::set<s64> action_conditions;
-  for (auto& c : calls)
-    if (action_switch(*c))
-      action_conditions.insert(c->i(call::Condition));
+  // Only property switches resolve a condition's enum name index; shipped
+  // databases share switch conditions with other containers' children.
+  // Conditions are shared, and one that an action switch child uses holds an
+  // action hash there for every call sharing it.
+  std::set<s64> property_conditions, action_conditions;
+  for (auto& c : calls) {
+    const s64 id = c->i(call::Condition);
+    if (const Node* sw = parent_switch(*c))
+      (sw->i(ctn::SwitchByte) != 0 ? action_conditions : property_conditions).insert(id);
+  }
   const auto condition = [&](s64 id) {
     Node* c = id >= 0 && !action_conditions.count(id) ? shared(file::Conditions, id) : nullptr;
     if (c && c->i(cond::ParentType) == CT_Switch && c->i(cond::PropertyType) == PR_Enum &&
         c->i(cond::LocalPropertyEnumNameIdx) >= 0)
       out.push_back({c, cond::Value, cond::LocalPropertyEnumNameIdx, true});
   };
-  for (auto& c : calls)
-    condition(c->i(call::Condition));
+  for (const s64 id : property_conditions)
+    condition(id);
   for (auto& t : user.list(user::PropertyTriggers))
     condition(t->i(ptrig::Condition));
 }

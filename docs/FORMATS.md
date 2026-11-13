@@ -38,7 +38,7 @@ and SLink2 v31, the versions Splatoon 3 1.0.0 ships).
 | Random table | min, max | same |
 | Curves | 0x14 | 0x18 (8-byte property name) |
 | Arrange groups | count + 8-byte entries | count + 16-byte entries |
-| User header | 0x30; 0x2C in ELink2 29 and SLink2 27 | 0x38; two 16-bit counts in place of the local property count in ELink2 36 and SLink2 33 |
+| User header | 0x30; 0x2C in ELink2 29 and SLink2 27 | 0x38; two 16-bit counts in place of the local property count from ELink2 36 and SLink2 33 |
 | Switch condition | 0x14 of words; 0x10 of bytes in ELink2 31 and SLink2 29 | 0x10, or 0x18 with an 8-byte enum name |
 
 The effect and sound systems of one library build carry different versions
@@ -89,17 +89,21 @@ conditions.
 A curve's last 16-bit field is its update type: 0 follows the property as it
 changes, 1 does not (`xlink2`'s `CurveUpdateType`).
 
-ELink2 36 and SLink2 33 split the user header's local property count into
-two 16-bit counts. The first is the local property count, which Tears of the
-Kingdom 1.0.0's loader, `UserResource::setupResourceParam_` and
-`ResourceParamCreator::solveUserBinAboutGlobalProperty_` read unsigned.
-The second is the number of distinct global properties the user reads:
-through global switch and blend-by containers, curves in its assets'
-parameters, and its global properties. It matches every user of Tears of
-the Kingdom's two databases, and eXamineLink rebuilds it on saving; none of
-those three functions reads it. `setupResourceParam_` finds local property
-names by binary search (`strcmp`) in both the database's table and the
-user's list, so validation requires both sorted in these versions.
+ELink2 36 and SLink2 33 and later split the user header's local property
+count into two 16-bit counts. The first is the local property count, which
+Tears of the Kingdom 1.0.0's loader, `UserResource::setupResourceParam_` and
+`ResourceParamCreator::solveUserBinAboutGlobalProperty_`, and Splatoon
+Raiders 1.1.0's loader and `solveUserBinAboutGlobalProperty_`, read
+unsigned; none of them reads the second. That one counts the distinct global properties the user reads:
+through global switch and blend-by containers, grid axes marked global
+(grid flag bits 0 and 1), curves in its assets' parameters, and its global
+properties. Every Tears of the Kingdom user matches that, but three
+Splatoon Raiders users do not (two of them have no calls at all), so
+eXamineLink keeps the stored count, sets it from the contents only when
+converting from a version without it, and validation notes a mismatch.
+`setupResourceParam_` finds local property names by binary search
+(`strcmp`) in both the database's table and the user's list, so validation
+requires both sorted in these versions.
 
 A jump container's child is a call another container holds, so it keeps that
 container's parent index and condition.
@@ -280,4 +284,5 @@ with an identical set, or its most common one.
 nnfck also identifies XLink 21, EffectLink `BLNK` 32 and SoundLink 50. No databases of those were available to
 verify against, so eXamineLink does not open them. XLink 27 to 36 other than
 27 to 31, 33, 34 and 36 open with the layout of their width and save as
-their own version.
+their own version. ELink2 36 pairs with SLink2 33 in Tears of the Kingdom
+and with SLink2 34 in Splatoon Raiders, which share one layout.

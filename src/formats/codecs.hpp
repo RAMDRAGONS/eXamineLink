@@ -16,6 +16,10 @@ bool has_user_locals(u32 version, int system);
 // Whether user headers pair a 16-bit local property count with a count of
 // the global properties the user reads.
 bool has_global_count(u32 version, int system);
+// That count as Nintendo's tools derive it: distinct global properties read
+// through global switch and blend-by containers, grid axes marked global,
+// curves in the user's asset parameters, and its global properties.
+u16 global_property_count(const Node& file, const Node& user);
 }  // namespace xlink_modern
 
 // XLink resource version 19 (Splatoon on Wii U).

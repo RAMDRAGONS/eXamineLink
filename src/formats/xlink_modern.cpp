@@ -321,10 +321,10 @@ void ModernReader::read_user(Node& file, Node& user, u64 at, u32 user_params) {
   for (int k = 0, j = 0; k < 11; ++k)
     if (k != 1 || g.user_locals)
       w[k] = r.u32_at(at + 4 * j++);
-  // The global property count beside it follows from the user's contents
-  // and is rebuilt on writing.
-  if (g.global_count)
+  if (g.global_count) {
     w[1] = r.u16_at(at + 4);
+    user.set_i(user::GlobalPropertyCount, r.u16_at(at + 6));
+  }
   const u64 trigger_table = at + (g.wide ? r.u64_at(at + 0x30) : r.u32_at(at + g.user_header() - 4));
   const u32 n_local = w[1], n_call = w[2];
   u64 p = at + g.user_header();
@@ -652,7 +652,6 @@ private:
   u32 direct_index(u32 value, s64 hint);
   void write_pdt();
   void write_user(const Node& u, std::size_t at);
-  std::size_t global_properties(const Node& u) const;
 
   const Document& d;
   const Node& file;
@@ -759,34 +758,6 @@ void ModernWriter::write_pdt() {
   w.patch_u32(pdt, static_cast<u32>(w.pos() - pdt));
 }
 
-// Distinct global properties the user reads: through global switch and
-// blend-by containers, curves in its assets' parameters, and its global
-// properties. The game sizes a per-user table of them by this count.
-std::size_t ModernWriter::global_properties(const Node& u) const {
-  std::set<std::string> names;
-  for (const auto& c : u.list(user::Containers))
-    if (has_switch_params(c->i(ctn::Type), c->i(ctn::BlendByProperty) != 0) && c->i(ctn::IsGlobal) &&
-        !c->s(ctn::WatchPropertyName).empty())
-      names.insert(c->s(ctn::WatchPropertyName));
-  const NodeList& sets = file.list(file::AssetParamSets);
-  const NodeList& curves = file.list(file::Curves);
-  for (const auto& c : u.list(user::Calls)) {
-    const s64 set = call_is_container(c->i(call::Flag)) ? -1 : c->i(call::ParamSet);
-    if (set < 0 || set >= sets.size())
-      continue;
-    for (const auto& p : sets.at(static_cast<int>(set)).list(pset::Params)) {
-      const s64 k = p->i(param::Value);
-      if (p->i(param::RefType) == RT_Curve && k >= 0 && k < curves.size() &&
-          curves.at(static_cast<int>(k)).i(curve::IsPropGlobal))
-        names.insert(curves.at(static_cast<int>(k)).s(curve::PropName));
-    }
-  }
-  for (const auto& p : u.list(user::Properties))
-    if (p->i(prop::IsGlobal))
-      names.insert(p->s(prop::Name));
-  return names.size();
-}
-
 void ModernWriter::write_user(const Node& u, std::size_t at) {
   const NodeList& calls = u.list(user::Calls);
   const NodeList& ctns = u.list(user::Containers);
@@ -817,7 +788,7 @@ void ModernWriter::write_user(const Node& u, std::size_t at) {
     if (u.list(user::LocalProperties).size() > 0xFFFF)
       throw Error("user " + u.label() + " has more local properties than this version can count");
     w.w16(static_cast<u16>(u.list(user::LocalProperties).size()));
-    w.w16(static_cast<u16>(global_properties(u)));
+    w.w16(static_cast<u16>(u.i(user::GlobalPropertyCount)));
   } else if (g.user_locals) {
     w.w32(static_cast<u32>(u.list(user::LocalProperties).size()));
   }
@@ -1292,6 +1263,39 @@ bool is_wide(u32 version, int system) {
 // user header.
 bool has_user_locals(u32 version, int system) {
   return version >= (system == static_cast<int>(System::SLink) ? 28u : 30u);
+}
+
+u16 global_property_count(const Node& file, const Node& u) {
+  std::set<std::string> names;
+  for (const auto& c : u.list(user::Containers)) {
+    if (has_switch_params(c->i(ctn::Type), c->i(ctn::BlendByProperty) != 0) && c->i(ctn::IsGlobal) &&
+        !c->s(ctn::WatchPropertyName).empty())
+      names.insert(c->s(ctn::WatchPropertyName));
+    // A grid's flag bits 0 and 1 mark its first and second axis global.
+    if (c->i(ctn::Type) == CT_Grid) {
+      if (c->i(ctn::GridFlags1) & 1 && !c->s(ctn::WatchPropertyName).empty())
+        names.insert(c->s(ctn::WatchPropertyName));
+      if (c->i(ctn::GridFlags1) & 2 && !c->s(ctn::WatchPropertyName2).empty())
+        names.insert(c->s(ctn::WatchPropertyName2));
+    }
+  }
+  const NodeList& sets = file.list(file::AssetParamSets);
+  const NodeList& curves = file.list(file::Curves);
+  for (const auto& c : u.list(user::Calls)) {
+    const s64 set = call_is_container(c->i(call::Flag)) ? -1 : c->i(call::ParamSet);
+    if (set < 0 || set >= sets.size())
+      continue;
+    for (const auto& p : sets.at(static_cast<int>(set)).list(pset::Params)) {
+      const s64 k = p->i(param::Value);
+      if (p->i(param::RefType) == RT_Curve && k >= 0 && k < curves.size() &&
+          curves.at(static_cast<int>(k)).i(curve::IsPropGlobal))
+        names.insert(curves.at(static_cast<int>(k)).s(curve::PropName));
+    }
+  }
+  for (const auto& p : u.list(user::Properties))
+    if (p->i(prop::IsGlobal))
+      names.insert(p->s(prop::Name));
+  return static_cast<u16>(std::min<std::size_t>(names.size(), 0xFFFF));
 }
 
 bool has_global_count(u32 version, int system) {

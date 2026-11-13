@@ -143,6 +143,12 @@ void convert_xlink(Document& d, const Document& src, const Target& t, std::vecto
     if (wide_ids)
       losses.push_back(count_text(wide_ids, "asset ids do not fit 16 bits and wrap"));
   }
+  // Versions with a global property count get the one Nintendo's tools
+  // would write; the source's own is kept when it has one.
+  if (!to_v19 && xlink_modern::has_global_count(t.version, src.system()) &&
+      (from_v19 || !xlink_modern::has_global_count(from, src.system())))
+    for (auto& u : file.list(file::Users))
+      u->set_i(user::GlobalPropertyCount, xlink_modern::global_property_count(file, *u));
   if (grids && (to_v19 || !to_wide))
     losses.push_back(count_text(grids, "grid containers cannot be stored by this version and lose their table"));
   if (jumps && (to_v19 || !xlink_modern::has_global_count(t.version, src.system())))
