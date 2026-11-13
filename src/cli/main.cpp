@@ -21,8 +21,8 @@
 #include "model/bridge.hpp"
 #include "model/convert.hpp"
 #include "model/document.hpp"
-#include "model/eslink_schema.hpp"
 #include "model/edit.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/validate.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
@@ -122,7 +122,8 @@ namespace {
     // Compares an edited model with the database it saved to, allowing for what
     // a format normalizes on save: parameter sets written in definition order
     // (and, in version 19, filled out with defaults), users sorted by hash and
-    // known only by hash in later XLink versions, untyped version 19 conditions.
+    // known only by hash in later XLink versions, untyped version 19 conditions,
+    // SoundLink 50 call tables and actions sorted by name.
     class CanonCompare {
     public:
         CanonCompare(const Document& a, const Document& b)
@@ -130,6 +131,7 @@ namespace {
             , B(b) {
             xlink_ = is_xlink(a.format);
             v19_ = xlink_ && a.version() == 19;
+            slink50_ = a.format == Format::SLink && a.version() == 50;
         }
 
         std::string run() {
@@ -180,6 +182,16 @@ namespace {
                 if (ia < 0)
                     return true;
                 return cond(ta->at(static_cast<int>(ia)), tb->at(static_cast<int>(ib)));
+            }
+            // An index into a list saved in another order points at the entry's new row.
+            if (ta) {
+                if (const auto it = moved_.find(ta); it != moved_.end()) {
+                    const s64 ia = a.i(f);
+                    const s64 want = ia >= 0 && ia < static_cast<s64>(it->second.size())
+                        ? it->second[static_cast<std::size_t>(ia)]
+                        : ia;
+                    return want == b.i(f) || fail(to_utf8(a.label(), A.encoding) + "." + fd.name + " points elsewhere");
+                }
             }
             if (!(a.value(f) == b.value(f)))
                 return fail(to_utf8(a.label(), A.encoding) + "." + fd.name + ": " + value_to_text(a, f, A.encoding)
@@ -254,6 +266,16 @@ namespace {
                 if (xlink_ && !v19_ && &a == A.root.get() && l == xlink::file::Users)
                     std::stable_sort(order.begin(), order.end(),
                         [&](int x, int y) { return user_hash(la.at(x)) < user_hash(la.at(y)); });
+                if (slink50_ && &a.schema() == &eslink::sound_link(50).user
+                    && (l == eslink::user::CallTables || l == eslink::user::Actions)) {
+                    const int name = la.def().element->field_index("Name");
+                    std::stable_sort(
+                        order.begin(), order.end(), [&](int x, int y) { return la.at(x).s(name) < la.at(y).s(name); });
+                    std::vector<s64>& row = moved_[&la];
+                    row.assign(order.size(), 0);
+                    for (std::size_t k = 0; k < order.size(); ++k)
+                        row[static_cast<std::size_t>(order[k])] = static_cast<s64>(k);
+                }
                 for (int k = 0; k < la.size(); ++k)
                     if (!node(la.at(order[k]), lb.at(k)))
                         return false;
@@ -263,7 +285,9 @@ namespace {
 
         const Document& A;
         const Document& B;
-        bool xlink_ = false, v19_ = false;
+        bool xlink_ = false, v19_ = false, slink50_ = false;
+        // Lists of A written in another order: the row each entry was saved at.
+        std::map<const NodeList*, std::vector<s64>> moved_;
         std::string why;
     };
 
@@ -749,8 +773,16 @@ namespace {
                 std::vector<const Node*> r;
                 const int s = fs.call.schema.field_index(start);
                 s64 first = ct.i(s), last = ct.i(s + 1);
-                // A SoundLink call table that does not pick at random plays its first asset.
-                if (sound && !(ct.i(fs.call.schema.field_index("Flags2")) & 1))
+                // A SoundLink call table that does not pick at random plays its first
+                // asset. Version 50 marks random calls on their assets only.
+                bool random = false;
+                if (const int flags = fs.call.schema.field_index("Flags2"); flags >= 0)
+                    random = ct.i(flags) & 1;
+                else
+                    for (s64 k = first; k <= last && !random; ++k)
+                        if (const Node* n = record(user, true, k))
+                            random = n->i(fs.asset.schema.field_index("Flags2")) != 0;
+                if (sound && !random)
                     last = std::min(last, first);
                 for (s64 k = first; k <= last; ++k)
                     if (const Node* n = record(user, true, k))

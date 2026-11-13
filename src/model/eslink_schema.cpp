@@ -1,10 +1,15 @@
 #include "model/eslink_schema.hpp"
 
 #include <cstdio>
+#include <initializer_list>
+#include <string_view>
+#include <utility>
 
 namespace xl::eslink {
 
     const std::vector<std::string> UserTypeNames = { "User", "Alias", "Empty" };
+    const std::array<u32, 7> Slink50UserWords
+        = { f32_bits(1.0f), f32_bits(1.0f), f32_bits(0.5f), 4, f32_bits(1.0f), 0, 50 };
 
     namespace {
 
@@ -93,7 +98,7 @@ namespace xl::eslink {
             };
         }
 
-        void build_common(FamilySchemas& fs, const char* family_name, const char* asset_noun) {
+        void build_common(FamilySchemas& fs, const char* family_name, const char* asset_noun, u32 version) {
             const bool sound = fs.family == Family::SoundLink;
             fs.pool_ref_asset.name = std::string(asset_noun) + "Ref";
             // A user that keeps its own records still stores an index list, which the
@@ -141,27 +146,48 @@ namespace xl::eslink {
                 field("PooledTriggers", FieldType::Bool,
                     "Draw action triggers from the shared pool by index (3DS versions)"),
                 field("ParamsPerAsset", FieldType::U32, "ELink: parameter words each effect carries"),
-                // SoundLink 69 hands these to the 3D sound calculation; Mario Kart 8
-                // skips a 0 and keeps its own default.
-                sound ? field("MaxVolumeDistance", FieldType::F32,
-                            "Version 69: distance up to which sounds play at full volume; 0 keeps the game's default "
-                            "(80 in Mario Kart 8)")
-                      : hidden_field("Header1", FieldType::F32),
-                sound ? field("UnitDistance", FieldType::F32,
-                            "Version 69: distance unit of the volume falloff; 0 keeps the game's default (250 in Mario "
-                            "Kart 8)")
-                      : hidden_field("Header2", FieldType::F32),
-                sound ? field("InteriorSize", FieldType::F32,
-                            "Version 69: size of the sound source; 0 keeps the game's default (70 in Mario Kart 8)")
-                      : hidden_field("Header3", FieldType::F32),
-                sound ? field("DistanceFlags", FieldType::Hex32,
-                            "Version 69: bit 31 measures distance horizontally, ignoring height")
-                      : field("Header4", FieldType::Hex32,
-                            "Version 10: word after the parameter count; aliases keep a word here"),
-                hidden_field("StringPool", FieldType::String),
-                hidden_field("OwnStrings", FieldType::Bool),
-                hidden_field("Tail", FieldType::String),
             };
+            if (version == 50) {
+                // Nothing in the game reads these, though every user carries them.
+                for (const auto& [name, type] :
+                    std::initializer_list<std::pair<const char*, FieldType>> { { "Unused0x20", FieldType::F32 },
+                        { "Unused0x24", FieldType::F32 }, { "Unused0x28", FieldType::F32 },
+                        { "Unused0x2C", FieldType::S32 }, { "Unused0x30", FieldType::F32 },
+                        { "Unused0x34", FieldType::S32 }, { "Unused0x38", FieldType::S32 } })
+                    fs.user.fields.push_back(field(name, type, "Never read by the game"));
+            } else {
+                fs.user.fields.insert(fs.user.fields.end(),
+                    {
+                        // SoundLink 69 hands these to the 3D sound calculation; Mario Kart 8
+                        // skips a 0 and keeps its own default.
+                        sound ? field("MaxVolumeDistance", FieldType::F32,
+                                    "Version 69: distance up to which sounds play at full volume; 0 keeps the game's "
+                                    "default (80 in Mario Kart 8)")
+                              : hidden_field("Header1", FieldType::F32),
+                        sound
+                            ? field("UnitDistance", FieldType::F32,
+                                  "Version 69: distance unit of the volume falloff; 0 keeps the game's default (250 in "
+                                  "Mario Kart 8)")
+                            : hidden_field("Header2", FieldType::F32),
+                        sound ? field("InteriorSize", FieldType::F32,
+                                    "Version 69: size of the sound source; 0 keeps the game's default (70 in Mario "
+                                    "Kart 8)")
+                              : hidden_field("Header3", FieldType::F32),
+                        sound ? field("DistanceFlags", FieldType::Hex32,
+                                    "Version 69: bit 31 measures distance horizontally, ignoring height")
+                              : field("Header4", FieldType::Hex32,
+                                    "Version 10: word after the parameter count; aliases keep a word here"),
+                        hidden_field("Header5", FieldType::U32),
+                        hidden_field("Header6", FieldType::U32),
+                        hidden_field("Header7", FieldType::U32),
+                    });
+            }
+            fs.user.fields.insert(fs.user.fields.end(),
+                {
+                    hidden_field("StringPool", FieldType::String),
+                    hidden_field("OwnStrings", FieldType::Bool),
+                    hidden_field("Tail", FieldType::String),
+                });
             fs.user.lists = { { "CallTables", &fs.call.schema }, { "Actions", &fs.action.schema },
                 { asset_noun + std::string("s"), &fs.asset.schema }, { "Triggers", &fs.trigger.schema },
                 { asset_noun + std::string("Refs"), &fs.pool_ref_asset }, { "TriggerRefs", &fs.pool_ref_trigger } };
@@ -222,25 +248,38 @@ namespace xl::eslink {
                 { K::Float, "PositionZ" }, { K::Float, "RotationX" }, { K::Float, "RotationY" },
                 { K::Float, "RotationZ" } };
             build_record(fs.trigger, "EffectTrigger", trig, fs, -1);
-            build_common(fs, "ELink", "Effect");
+            build_common(fs, "ELink", "Effect", 0);
+        }
+
+        void describe(RecordLayout& r, std::string_view name, const char* doc) {
+            r.schema.fields[static_cast<std::size_t>(r.schema.field_index(name))].doc = doc;
         }
 
         void fill_sound_link(FamilySchemas& fs, u32 version) {
             fs.family = Family::SoundLink;
-            build_record(fs.call, "SoundCallTable",
-                { { K::String, "Name" }, { K::Runtime, "" }, { K::Runtime, "" }, { K::Packed, "Flags", "bbbb" },
-                    { K::Range, "Asset" } },
-                fs, user::Assets);
-            build_record(fs.action, "SoundAction",
-                { { K::String, "Name" }, { K::Runtime, "" }, { K::Hex, "" }, { K::Hex, "" }, { K::Range, "Trigger" } },
-                fs, user::Triggers);
+            const bool v50 = version == 50;
+            // Version 50 call tables and actions are a name and a range; the game
+            // finds both by binary search on the name.
+            std::vector<SlotSpec> call = { { K::String, "Name" }, { K::Runtime, "" } };
+            std::vector<SlotSpec> action = call;
+            if (!v50) {
+                call.insert(call.end(), { { K::Runtime, "" }, { K::Packed, "Flags", "bbbb" } });
+                action.insert(action.end(), { { K::Hex, "" }, { K::Hex, "" } });
+            }
+            call.push_back({ K::Range, "Asset" });
+            action.push_back({ K::Range, "Trigger" });
+            build_record(fs.call, "SoundCallTable", call, fs, user::Assets);
+            build_record(fs.action, "SoundAction", action, fs, user::Triggers);
             // Sound parameters as ranges: a value, and the top of the range a random
             // value is drawn from when it lies above the value (0 for none). Version 69
-            // adds a surround pan; the names match across versions so records convert
-            // field by field.
-            const std::vector<SlotSpec> params4
-                = { { K::Float, "Volume" }, { K::Float, "VolumeMax" }, { K::Float, "Pitch" }, { K::Float, "PitchMax" },
-                      { K::Float, "Lpf" }, { K::Float, "LpfMax" }, { K::Float, "Pan" }, { K::Float, "PanMax" } };
+            // adds a surround pan and version 50 has no pan; the names match across
+            // versions so records convert field by field.
+            std::vector<SlotSpec> params = { { K::Float, "Volume" }, { K::Float, "VolumeMax" }, { K::Float, "Pitch" },
+                { K::Float, "PitchMax" }, { K::Float, "Lpf" }, { K::Float, "LpfMax" } };
+            if (!v50)
+                params.insert(params.end(), { { K::Float, "Pan" }, { K::Float, "PanMax" } });
+            if (version == 69)
+                params.insert(params.end(), { { K::Float, "SurroundPan" }, { K::Float, "SurroundPanMax" } });
             const auto append = [](std::vector<SlotSpec>& v, const std::vector<SlotSpec>& more) {
                 v.insert(v.end(), more.begin(), more.end());
             };
@@ -253,23 +292,56 @@ namespace xl::eslink {
             if (version == 69) {
                 asset.push_back({ K::String, "Name20" });
                 asset.push_back({ K::Runtime, "" });
+            }
+            if (version != 73)
                 trig[2] = { K::CallRef, "Call" };
-            }
-            append(asset, params4);
-            append(trig, params4);
-            if (version == 69) {
-                append(asset, { { K::Float, "SurroundPan" }, { K::Float, "SurroundPanMax" } });
-                append(trig, { { K::Float, "SurroundPan" }, { K::Float, "SurroundPanMax" } });
-            }
+            if (v50)
+                trig[3] = { K::String, "Label" };
+            append(asset, params);
+            append(trig, params);
             append(asset, { { K::Pair, "Delay" }, { K::String, "Bone" }, { K::Packed, "Flags", "bbbb" } });
             trig.push_back({ K::Pair, "Delay" });
-            if (version == 69)
+            if (version != 73)
                 trig.push_back({ K::Hex, "" });
             build_record(fs.asset, "SoundAsset", asset, fs, -1);
             build_record(fs.trigger, "SoundTrigger", trig, fs, -1);
             const int label = fs.asset.slot_field[6];
             fs.asset.schema.label = [label](const Node& n) { return "#" + std::to_string(n.row()) + " " + n.s(label); };
-            build_common(fs, "SLink", "Asset");
+            if (v50) {
+                RecordLayout& a = fs.asset;
+                describe(a, "Name08",
+                    "First condition, matched against a value the game passes; empty matches any. The first asset "
+                    "matching both conditions plays, otherwise the best partial match");
+                describe(a, "Field0x0C",
+                    "With Flags2 set, the asset's weight in the random pick; otherwise the game replaces it with the "
+                    "first condition's id");
+                describe(a, "Name10", "Second condition, matched like the first");
+                describe(a, "Field0x14", "Replaced by the game with the second condition's id");
+                describe(a, "Label", "Sound label in the sound archive");
+                describe(a, "LabelId", "Sound id played in place of Label when nonzero");
+                describe(a, "Volume", "A nonzero VolumeMax draws the volume at random between the two");
+                describe(a, "Pitch", "A nonzero PitchMax draws the pitch at random between the two");
+                describe(a, "Lpf", "Low-pass filter; a nonzero LpfMax draws it at random between the two");
+                describe(a, "DelayMin",
+                    "Frames before the sound starts; a nonzero DelayMax draws them at random up to it. A trigger's "
+                    "delay adds to its asset's");
+                describe(a, "Bone", "Bone whose position the sound takes; empty for the owner's");
+                describe(a, "Flags0", "Nonzero: the sound plays only while the game keeps holding it");
+                describe(a, "Flags1", "Nonzero: the sound follows its position every frame");
+                describe(
+                    a, "Flags2", "Nonzero: the call table picks one of its assets at random, weighted by Field0x0C");
+                describe(a, "Flags3", "Never read by the game");
+                RecordLayout& t = fs.trigger;
+                describe(t, "Call", "Call table the trigger plays");
+                describe(t, "Label", "Sound label played in place of the call table when Flags0 has 0x10");
+                describe(t, "StartFrame", "The trigger fires while StartFrame <= frame < EndFrame");
+                describe(t, "EndFrame", "-1 lasts until the action ends");
+                describe(t, "Flags0",
+                    "1: fire once per action; 4: the sound follows its position every frame; 8: play only while the "
+                    "frame is in range; 0x10: play Label in place of the call table");
+                describe(t, "Flags2", "0 or more: the sound stops when the action changes; -1 keeps it playing");
+            }
+            build_common(fs, "SLink", "Asset", version);
         }
 
     } // namespace
@@ -282,14 +354,14 @@ namespace xl::eslink {
     }
 
     const FamilySchemas& sound_link(u32 version) {
-        static FamilySchemas v69, v73;
-        static const bool filled = (fill_sound_link(v69, 69), fill_sound_link(v73, 73), true);
+        static FamilySchemas v50, v69, v73;
+        static const bool filled = (fill_sound_link(v50, 50), fill_sound_link(v69, 69), fill_sound_link(v73, 73), true);
         (void)filled;
-        return version == 69 ? v69 : v73;
+        return version == 50 ? v50 : version == 69 ? v69 : v73;
     }
 
     const FamilySchemas* family_of(const Node& root) {
-        for (const FamilySchemas* fs : { &effect_link(), &sound_link(69), &sound_link(73) })
+        for (const FamilySchemas* fs : { &effect_link(), &sound_link(50), &sound_link(69), &sound_link(73) })
             if (&root.schema() == &fs->file)
                 return fs;
         return nullptr;

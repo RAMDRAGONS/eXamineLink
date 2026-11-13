@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include "model/node.hpp"
 
 // EffectLink ("eflk") and SoundLink ("SLNK"), the effect and sound link
@@ -43,6 +45,8 @@ namespace xl::eslink {
     };
 
     extern const std::vector<std::string> UserTypeNames;
+    // The words Nintendo's tool writes after every SoundLink 50 user's counts.
+    extern const std::array<u32, 7> Slink50UserWords;
     enum UserType { UT_User, UT_Alias, UT_Empty };
 
     namespace file {
@@ -58,11 +62,15 @@ namespace xl::eslink {
             PooledAssets,
             PooledTriggers,
             ParamsPerAsset,
-            // SoundLink: MaxVolumeDistance, UnitDistance, InteriorSize, DistanceFlags.
+            // SoundLink 69: MaxVolumeDistance, UnitDistance, InteriorSize,
+            // DistanceFlags. SoundLink 50: seven words the game never reads.
             Header1,
             Header2,
             Header3,
             Header4,
+            Header5,
+            Header6,
+            Header7,
             StringPool,
             OwnStrings,
             // Bytes between the end of a user's block and the next user.
@@ -92,7 +100,7 @@ namespace xl::eslink {
         Schema pool_ref_asset, pool_ref_trigger, asset_param, user, file;
     };
 
-    // EffectLink versions 9 and 10 share record layouts; SoundLink 69 and 73 do not.
+    // EffectLink versions 9 and 10 share record layouts; SoundLink 50, 69 and 73 do not.
     const FamilySchemas& effect_link();
     const FamilySchemas& sound_link(u32 version);
     // The family schema set a root node belongs to, or nullptr.

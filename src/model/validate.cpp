@@ -4,8 +4,8 @@
 #include <set>
 
 #include "formats/codecs.hpp"
-#include "model/eslink_schema.hpp"
 #include "model/elink0_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
 
@@ -29,6 +29,7 @@ namespace xl {
             void references();
             void xlink();
             void eslink();
+            void slink50_user(const Node& u);
             void elink0();
 
             const Document& doc;
@@ -247,6 +248,49 @@ namespace xl {
                 if (u.i(user::PooledAssets) && !u.list(user::Assets).empty())
                     add(Severity::Warning, &u,
                         where(u) + ": own effects are ignored while assets come from the shared pool");
+                if (doc.format == Format::SLink && v == 50)
+                    slink50_user(u);
+            }
+        }
+
+        // SoundLink 50 games find call tables and actions by binary search on their
+        // names and pick a random call's asset by the weights of its assets.
+        void Checker::slink50_user(const Node& u) {
+            using namespace eslink;
+            const FamilySchemas& fs = sound_link(50);
+            for (const int l : { user::CallTables, user::Actions }) {
+                const int name = l == user::CallTables ? fs.call.name_field : fs.action.name_field;
+                std::set<std::string> seen;
+                for (const auto& n : u.list(l))
+                    if (!seen.insert(n->s(name)).second)
+                        add(Severity::Warning, n.get(),
+                            where(*n) + ": another entry of the user has this name; the game may find either");
+            }
+            const int start = fs.call.schema.field_index("AssetStart");
+            const int random = fs.asset.schema.field_index("Flags2");
+            const int weight = fs.asset.schema.field_index("Field0x0C");
+            const NodeList& assets = u.list(user::Assets);
+            for (const auto& ct : u.list(user::CallTables)) {
+                std::size_t marked = 0, all = 0;
+                s64 total = 0;
+                for (s64 k = ct->i(start); k <= ct->i(start + 1); ++k) {
+                    if (k < 0 || k >= assets.size())
+                        continue;
+                    const Node& a = assets.at(static_cast<int>(k));
+                    ++all;
+                    if (a.i(random)) {
+                        ++marked;
+                        total += a.i(weight);
+                    }
+                }
+                if (marked && marked < all)
+                    add(Severity::Warning, ct.get(),
+                        where(*ct)
+                            + ": only some of its assets are marked random; the game weighs the others by "
+                              "their first condition's id");
+                else if (marked && total <= 0)
+                    add(Severity::Warning, ct.get(),
+                        where(*ct) + ": its random assets' weights add up to nothing, so the game picks by condition");
             }
         }
 

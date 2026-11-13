@@ -6,8 +6,8 @@
 
 #include "core/crc32.hpp"
 #include "formats/codecs.hpp"
-#include "model/eslink_schema.hpp"
 #include "model/elink0_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
 
@@ -219,13 +219,13 @@ namespace xl {
             return out;
         }
 
-        // EffectLink 9 / SoundLink 69 (Wii U) and EffectLink 10 / SoundLink 73
-        // (3DS). The Wii U versions have no shared pools, aliases or base users, so
-        // those are expanded into each user going there.
+        // EffectLink 9 / SoundLink 50 and 69 (Wii U) and EffectLink 10 / SoundLink
+        // 73 (3DS). The Wii U versions have no shared pools, aliases or base users,
+        // so those are expanded into each user going there.
         void convert_old_link(Document& d, const Document& src, const Target& t, std::vector<std::string>& losses) {
             using namespace eslink;
             const bool effect = d.format == Format::ELink;
-            const bool to_wiiu = t.version == 9 || t.version == 69;
+            const bool to_wiiu = t.version == 9 || t.version == 50 || t.version == 69;
             const s64 kind = effect ? t.version : 1;
             const std::string noun = effect ? "effects" : "assets";
             Node& file = *d.root;
@@ -315,48 +315,91 @@ namespace xl {
             if (effect || src.version() == t.version)
                 return;
 
-            // SoundLink 69 and 73 lay records out differently; rebuild them under the
-            // target's schemas. Triggers name their call by index in 69 and by name
-            // in 73.
+            // SoundLink 50, 69 and 73 lay records out differently; rebuild them under
+            // the target's schemas. Triggers name their call by index in 50 and 69
+            // and by name in 73.
+            const u32 from_v = src.version();
             std::size_t header = 0;
             for (const auto& u : users)
                 for (const int f : { user::Header1, user::Header2, user::Header3, user::Header4 })
-                    header += t.version == 73 && u->i(user::Type) == UT_User && u->i(f) != 0;
+                    header += from_v == 69 && u->i(user::Type) == UT_User && u->i(f) != 0;
             if (header)
-                losses.push_back(
-                    count_text(header, "user distance settings of version 69 have no place in version 73"));
+                losses.push_back(count_text(header,
+                    "user distance settings of version 69 have no place in version " + std::to_string(t.version)));
             if (t.version == 69)
-                losses.push_back(
-                    "version 73 has no user distance settings; users are written with 0, which Mario Kart 8 "
-                    "replaces with its defaults (full volume within 80, unit distance 250, interior size 70)");
+                losses.push_back("version " + std::to_string(from_v)
+                    + " has no user distance settings; users are written with 0, which Mario Kart 8 replaces with "
+                      "its defaults (full volume within 80, unit distance 250, interior size 70)");
+            if (from_v == 50)
+                losses.push_back("the seven words every version 50 user carries, which the game never reads, are "
+                                 "not kept");
 
             const FamilySchemas& to = sound_link(t.version);
-            const FamilySchemas& from = sound_link(src.version());
+            const FamilySchemas& from = sound_link(from_v);
+            const int from_call = from.trigger.schema.field_index("Call");
+            const int from_call_name = from.trigger.schema.field_index("CallName");
+            const int to_call = to.trigger.schema.field_index("Call");
+            const int to_call_name = to.trigger.schema.field_index("CallName");
+            const int to_call_flags = to.call.schema.field_index("Flags2");
+            const int from_call_flags = from.call.schema.field_index("Flags2");
+            const int asset_random = from.asset.schema.field_index("Flags2");
+            const int asset_start = from.call.schema.field_index("AssetStart");
             std::size_t unmatched = 0;
             const auto fixup = [&](const Node& s, Node& o) {
-                if (&s.schema() != &from.trigger.schema)
-                    return;
                 const Node* su = s.ancestor(&from.user);
-                if (!su)
+                if (&s.schema() == &from.user && &o.schema() == &to.user && t.version == 50) {
+                    for (std::size_t k = 0; k < Slink50UserWords.size(); ++k)
+                        o.set_i(user::Header1 + static_cast<int>(k), Slink50UserWords[k]);
+                }
+                // Version 50 marks a random call on its assets alone; the others also
+                // set bit 0 of the call's third flag byte, which Nintendo's databases
+                // set exactly for calls holding a random asset.
+                if (&s.schema() == &from.call.schema && from_v == 50 && to_call_flags >= 0 && su) {
+                    const NodeList* assets = asset_list_of(*su);
+                    bool random = false;
+                    for (s64 k = s.i(asset_start); k <= s.i(asset_start + 1); ++k)
+                        if (k >= 0 && k < assets->size())
+                            random = random || assets->at(static_cast<int>(k)).i(asset_random) != 0;
+                    o.set_i(to_call_flags, (o.i(to_call_flags) & ~1) | (random ? 1 : 0));
+                }
+                // Going to version 50 the assets carry the random choice: those of a
+                // random call are marked and, when no weights are given, weigh the
+                // same, since the game picks at random only while weights add up.
+                if (&s.schema() == &from.asset.schema && from_v != 50 && su) {
+                    const int from_weight = from.asset.schema.field_index("Field0x0C");
+                    const int weight = to.asset.schema.field_index("Field0x0C");
+                    const int random = to.asset.schema.field_index("Flags2");
+                    for (const auto& ct : su->list(user::CallTables)) {
+                        const s64 first = ct->i(asset_start), last = ct->i(asset_start + 1);
+                        if (!(ct->i(from_call_flags) & 1) || s.row() < first || s.row() > last)
+                            continue;
+                        s64 total = 0;
+                        for (s64 k = first; k <= last && k < s.parent_list()->size(); ++k)
+                            total += std::max<s64>(0, s.parent_list()->at(static_cast<int>(k)).i(from_weight));
+                        o.set_i(random, 1);
+                        if (total <= 0)
+                            o.set_i(weight, 1);
+                    }
+                }
+                if (&s.schema() != &from.trigger.schema || !su)
                     return;
                 const NodeList& calls = su->list(user::CallTables);
                 const int name_field = from.call.name_field;
-                if (t.version == 73) {
-                    const s64 ci = s.i(from.trigger.schema.field_index("Call"));
-                    const int out_field = to.trigger.schema.field_index("CallName");
+                if (from_call >= 0 && to_call_name >= 0) {
+                    const s64 ci = s.i(from_call);
                     if (ci >= 0 && ci < calls.size())
-                        o.set_s(out_field, calls.at(static_cast<int>(ci)).s(name_field));
+                        o.set_s(to_call_name, calls.at(static_cast<int>(ci)).s(name_field));
                     else
                         ++unmatched;
-                } else {
-                    const std::string& wanted = s.s(from.trigger.schema.field_index("CallName"));
+                } else if (from_call_name >= 0 && to_call >= 0) {
+                    const std::string& wanted = s.s(from_call_name);
                     s64 found = -1;
                     for (int k = 0; k < calls.size() && found < 0; ++k)
                         if (calls.at(k).s(name_field) == wanted)
                             found = k;
                     if (found < 0)
                         ++unmatched;
-                    o.set_i(to.trigger.schema.field_index("Call"), found);
+                    o.set_i(to_call, found);
                 }
             };
             std::map<std::string, std::size_t> dropped;
@@ -365,8 +408,11 @@ namespace xl {
             d.root = std::move(rebuilt);
             if (unmatched)
                 losses.push_back(count_text(unmatched, "triggers name no call table of their user"));
+            // Calls, distance settings, unused words and the call's random bit are
+            // accounted for above.
             for (const auto& [what, n] : dropped)
-                if (what.find(".Call") == std::string::npos)
+                if (what.find(".Call") == std::string::npos && !what.starts_with("User.")
+                    && what != "SoundCallTable.Flags2")
                     losses.push_back(
                         count_text(n, "values of " + what + " have no place in version " + std::to_string(t.version)));
         }

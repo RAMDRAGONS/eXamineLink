@@ -4,8 +4,8 @@
 #include <set>
 
 #include "core/crc32.hpp"
-#include "model/eslink_schema.hpp"
 #include "model/elink0_schema.hpp"
+#include "model/eslink_schema.hpp"
 #include "model/xlink_schema.hpp"
 
 namespace xl {
@@ -129,6 +129,27 @@ namespace xl {
         }
         if (el == &fs->pool_ref_asset || el == &fs->pool_ref_trigger)
             n->set_i(pool_ref::Index, 0);
+        // What nearly every SoundLink 50 record of Animal Crossing Plaza holds: full
+        // volume and pitch, assets following their position, triggers lasting until
+        // the action ends and following their position.
+        if (fs == &sound_link(50)) {
+            const auto set = [&](const Schema& s, std::string_view name, s64 v) { n->set_i(s.field_index(name), v); };
+            if (el == &fs->user) {
+                for (std::size_t k = 0; k < Slink50UserWords.size(); ++k)
+                    n->set_i(user::Header1 + static_cast<int>(k), Slink50UserWords[k]);
+            } else if (el == &fs->asset.schema || el == &fs->trigger.schema) {
+                set(*el, "Id", list.size());
+                n->set_f32(el->field_index("Volume"), 1.0f);
+                n->set_f32(el->field_index("Pitch"), 1.0f);
+                if (el == &fs->asset.schema) {
+                    set(*el, "Flags1", 1);
+                } else {
+                    set(*el, "EndFrame", -1);
+                    set(*el, "Flags0", 4);
+                    set(*el, "Flags2", -1);
+                }
+            }
+        }
         return n;
     }
 

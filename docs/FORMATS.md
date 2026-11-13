@@ -209,7 +209,7 @@ byte order lays them out correctly:
 | Effect | +0x30, +0x34 | four bytes each |
 | Effect | +0x38 | signed 16-bit, two bytes |
 | Effect trigger | +0x18 | 16-bit, two bytes |
-| Sound asset | 69: +0x58, 73: +0x48 | four bytes |
+| Sound asset | 50: +0x40, 69: +0x58, 73: +0x48 | four bytes |
 | Sound trigger | +0x18 | 16-bit, signed 16-bit |
 
 The two words after a sound action's name, and the last word of a
@@ -222,6 +222,52 @@ String fields were identified from the loaders (ELink 10: effect
 asset +0x08, +0x10, +0x18 label, +0x20, +0x54; its triggers name their call
 by index). Words the loaders overwrite at run time are kept but hidden.
 ELink parameter words belong to the user's effect slots.
+
+### SLink 50
+
+From Animal Crossing Plaza's loader (`Lounge.rpx`), which accepts only
+`SLNK` version 50. The file is laid out like version 69: header, one
+offset per user, the shared strings, then the user blocks, each ending
+with a zero word when its records use the shared strings. Users are found
+by name with a linear search.
+
+| Record | Size | Fields |
+| --- | --- | --- |
+| User header | 0x3C | kind, block size, name, call table, action, asset and trigger counts, trailer position, then seven words |
+| Call table | 0x0C | name, the game's, asset range |
+| Action | 0x0C | name, the game's, trigger range |
+| Asset | 0x44 | as version 73 without the pan pair: id, the game's, two conditions each followed by an id, label, label id, volume, pitch and low-pass ranges, delay, bone, four flag bytes |
+| Trigger | 0x3C | id, the game's, call index, label, start and end frame, 16-bit flags, signed 16-bit, volume, pitch and low-pass ranges, delay, a word |
+
+The seven words after a user's counts are 1.0, 1.0, 0.5, 4, 1.0, 0 and 50
+in every user. Nothing in the game reads them: the loader keeps a pointer
+to them that no code uses, and no other code reads past a user's
+counts.
+
+Call tables and actions are found by binary search on their names
+(byte-wise), so they must be sorted; eXamineLink saves them sorted and
+moves the triggers' call indices with them. A call table with any asset
+whose third flag byte is set picks one of its assets at random, weighted
+by the word at +0x0C; when the weights add up to nothing it falls back to
+the conditions. Otherwise the game replaces +0x0C and +0x14 with the ids of
+the two condition names (0xFFFF when empty or unknown) and plays the first
+asset matching both values it passes, else the best partial match, an
+empty condition matching anything. Mario Kart 8 and Happy Home Designer
+assets carry the same weights and flag, and in Mario Kart 8 and Tri Force
+Heroes a call table sets bit 0 of its third flag byte exactly when one of
+its assets is random, so conversion moves the mark between the two.
+
+The first flag byte holds a sound while the game keeps asking for it, the
+second updates its position every frame. The other parameters: label id,
+when nonzero, is played in place of the label; volume, pitch and low-pass
+ranges draw at random between their two values when the second is
+nonzero (`SetVolume`, `SetPitch` and `SetLpfFreq` of the sound); delays
+are frames, and a trigger's adds to its asset's. Trigger flags: 1 fires
+once per action, 4 follows the position, 8 plays only while the frame is
+in range, 0x10 plays the trigger's own label in place of its call. A
+trigger fires while start <= frame < end, -1 lasting until the action
+ends; a signed 16-bit value of 0 or more stops its sound when the action
+changes.
 
 ## ELink0 (`BLNK`)
 
@@ -288,7 +334,7 @@ without a counterpart is reported before saving.
   direct value table, and switch conditions take the property type inferred
   from their values. These mappings follow the loaders but were not seen
   working in a game.
-- ELink 9 and 10, SLink 69 and 73: going to a Wii U version, pooled
+- ELink 9 and 10, SLink 50, 69 and 73: going to a Wii U version, pooled
   records are copied into each user that lists them (with that user's
   parameter words) and aliases become copies of their base user. SLink
   records are rebuilt field by field: 69's distance settings and surround
@@ -296,7 +342,12 @@ without a counterpart is reported before saving.
   Mario Kart 8 replaces with its defaults), and a 69
   trigger's call index becomes the call's name in 73 and back. A database
   taken 69 to 73 to 69 differs from the original only in those values and
-  in string table layout.
+  in string table layout. Version 50 has no pan pair and its seven user
+  words, which nothing reads, have no place in the others; going to 50
+  users get the words Nintendo's tool writes, and a call table's random
+  bit marks its assets (each weighing 1 when none has a weight). Animal
+  Crossing Plaza's database taken to 69 or 73 and back differs only in
+  string table layout.
 
 ## Between ELink or SLink and XLink
 
@@ -337,8 +388,8 @@ with an identical set, or its most common one.
 
 ## Not covered
 
-nnfck also identifies XLink 21 and SLink 50. No databases of those were available to
-verify against, so eXamineLink does not open them. XLink 27 to 36 other than
+nnfck also identifies XLink 21. No database of it was available to verify
+against, so eXamineLink does not open it. XLink 27 to 36 other than
 27 to 31, 33, 34 and 36 open with the layout of their width and save as
 their own version. ELink2 36 pairs with SLink2 33 in Tears of the Kingdom
 and with SLink2 34 in Splatoon Raiders, Nintendo Switch Sports Resort and

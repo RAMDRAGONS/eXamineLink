@@ -10,7 +10,8 @@ effects and sounds:
 | | 31 to 36, 64-bit | Splatoon 3 (ELink2 v34, SLink2 v31); The Legend of Zelda: Tears of the Kingdom (ELink2 v36, SLink2 v33); Splatoon Raiders, Nintendo Switch Sports Resort and Mario Kart World (ELink2 v36, SLink2 v34) |
 | ELink (`eflk`) | 9 | Mario Kart 8 (Wii U) |
 | | 10 (shared pools) | Animal Crossing: Happy Home Designer (3DS) |
-| SLink (`SLNK`) | 69 | Mario Kart 8 (Wii U), The Legend of Zelda: Tri Force Heroes (3DS) |
+| SLink (`SLNK`) | 50 | Animal Crossing Plaza (Wii U) |
+| | 69 | Mario Kart 8 (Wii U), The Legend of Zelda: Tri Force Heroes (3DS) |
 | | 73 (shared pools) | Animal Crossing: Happy Home Designer (3DS) |
 | ELink0 (`BLNK`, `.belink`) | none; effects and sounds in one record | Nintendo Land (Wii U) |
 
@@ -123,6 +124,7 @@ Sound presets:
 
 | Preset | Games | Version | Byte order | Encoding |
 |---|---|---|---|---|
+| `lounge` | Animal Crossing Plaza (Wii U) | SLink 50 | big | Shift-JIS |
 | `turbo` | Mario Kart 8 (Wii U) | SLink 69 | big | Shift-JIS |
 | `alice` | The Legend of Zelda: Tri Force Heroes (3DS) | SLink 69 | little | Shift-JIS |
 | `takumi` | Animal Crossing: Happy Home Designer (3DS) | SLink 73 | little | Shift-JIS |
@@ -144,11 +146,13 @@ using it (of several, the one sharing the database's byte order, then its
 encoding), or keeps the database's own when the version stays the same. Before writing,
 it lists what the chosen version cannot hold: version 19 stores no
 parameter defaults or local properties and finds users by name; 32-bit
-layouts have no grid containers; ELink 9 and SLink 69 have no
+layouts have no grid containers; ELink 9 and SLink 50 and 69 have no
 shared pools or aliases, so those become copies. SLink 69 also stores
 per-user distance settings and surround panning, which 73 has no place for.
 Going the other way the distances are written as 0, which Mario Kart 8
-replaces with its own defaults.
+replaces with its own defaults. SLink 50 has no panning and its call tables
+and actions are a name and a range; they are saved sorted by name, as the
+game looks them up by binary search.
 
 Conversions rest on the layouts each game reads; the meaning of fields that
 moved between versions is inferred, so test converted databases in the game.
@@ -190,9 +194,11 @@ Deluxe ported Mario Kart 8's databases:
   three named properties, which the dialog asks for. They are guessed from
   the values both databases use: Mario Kart 8's conditions come out as
   GroundAttribute, WaterState and CourseID, as in Mario Kart 8 Deluxe.
-- A SLink call table marked random becomes a random container; one
-  that is not plays its first asset. Volume, pitch, filter, pan and delay
-  ranges become random parameters.
+- A SLink call table marked random becomes a random container, weighted
+  as its assets are in SLink 50; one that is not plays its first asset.
+  SLink 50 games pick among those assets by two conditions, which are not
+  carried over. Volume, pitch, filter, pan and delay ranges become random
+  parameters.
 - Effect and sound fields become the ELink2 and SLink2 parameters of the
   same meaning (emitter set or label, bone, scale, position, rotation,
   colour, volume...), triggers become action triggers in one action slot

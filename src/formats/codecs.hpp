@@ -34,7 +34,7 @@ namespace xl {
         Buffer write(const Document& doc);
     } // namespace elink0_codec
 
-    // EffectLink 9 and 10, SoundLink 69 and 73.
+    // EffectLink 9 and 10, SoundLink 50, 69 and 73.
     namespace eslink_codec {
         Document read(Bytes data);
         Buffer write(const Document& doc);

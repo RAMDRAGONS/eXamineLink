@@ -192,10 +192,13 @@ namespace xl {
 
         class ToXLink {
         public:
-            ToXLink(
-                const Document& doc, const Document& src, const BridgeOptions& opt, std::vector<std::string>& warnings)
+            // `from_version` is the version the source had before it was taken to its
+            // plain version.
+            ToXLink(const Document& doc, const Document& src, u32 from_version, const BridgeOptions& opt,
+                std::vector<std::string>& warnings)
                 : m_doc(doc)
                 , m_src(src)
+                , m_from_version(from_version)
                 , m_opt(opt)
                 , m_warnings(warnings)
                 , m_sound(src.format == Format::SLink)
@@ -408,6 +411,7 @@ namespace xl {
                 const int ct_start = field_of(m_fs.call.schema, m_sound ? "AssetStart" : "EffectStart");
                 const int ct_end = ct_start + 1;
                 const int ct_random = field_of(m_fs.call.schema, "Flags2");
+                const int asset_weight = m_sound ? field_of(m_fs.asset.schema, "Field0x0C") : -1;
                 NodeList& calls = x.list(X::user::Calls);
                 struct Pending {
                     int call;
@@ -464,7 +468,9 @@ namespace xl {
                             Node& cond = m_x.root->list(X::file::Conditions)
                                              .append(make_element(m_x, m_x.root->list(X::file::Conditions)));
                             cond.set_i(X::cond::ParentType, X::CT_Random);
-                            cond.set_i(X::cond::Weight, f32_bits(1.0f));
+                            // Version 50 games weigh a random pick by each asset's weight.
+                            const s64 w = m_from_version == 50 ? assets.at(e).i(asset_weight) : 0;
+                            cond.set_i(X::cond::Weight, f32_bits(w > 0 ? static_cast<f32>(w) : 1.0f));
                             child.set_i(X::call::Condition, cond.row());
                             asset_call(child, assets.at(e));
                         }
@@ -733,8 +739,11 @@ namespace xl {
                     m_warnings.push_back(count_text(m_skipped_empty, "empty users skipped"));
                 if (m_dropped_assets)
                     m_warnings.push_back(count_text(m_dropped_assets,
-                        "sound assets after the first of a call table that does not "
-                        "pick at random dropped; such a call plays its first asset"));
+                        m_from_version == 50 ? "sound assets after the first of a call table that does not pick at "
+                                               "random dropped; version 50 games pick among them by their conditions, "
+                                               "which have no counterpart here"
+                                             : "sound assets after the first of a call table that does not "
+                                               "pick at random dropped; such a call plays its first asset"));
                 if (m_empty_calls)
                     m_warnings.push_back(
                         count_text(m_empty_calls, "call tables without assets become calls naming no asset"));
@@ -760,6 +769,7 @@ namespace xl {
 
             const Document& m_doc;
             const Document& m_src;
+            u32 m_from_version;
             const BridgeOptions& m_opt;
             std::vector<std::string>& m_warnings;
             bool m_sound;
@@ -1399,7 +1409,7 @@ namespace xl {
             for (int k = 0; k < 3 && s.format == Format::ELink; ++k)
                 if (options.conditions[static_cast<std::size_t>(k)].empty())
                     throw Error("Condition" + std::to_string(k + 1) + " needs an XLink property to stand for");
-            built = ToXLink(doc, s, options, warnings).run(which);
+            built = ToXLink(doc, s, src.version(), options, warnings).run(which);
             picked.clear();
         } else {
             built = FromXLink(doc, s, options, warnings).run(which);

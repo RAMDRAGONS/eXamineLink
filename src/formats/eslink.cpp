@@ -11,9 +11,10 @@
 // the version and holds its effects, their parameter words, call tables,
 // action triggers and actions, followed by the user's own strings.
 //
-// SoundLink 69 (Wii U): one offset per user, then the shared string table,
-// then the user blocks: call tables, actions, assets and action triggers,
-// ending with a word that is zero when records use the shared strings.
+// SoundLink 50 and 69 (Wii U): one offset per user, then the shared string
+// table, then the user blocks: call tables, actions, assets and action
+// triggers, ending with a word that is zero when records use the shared
+// strings. The user header differs only in how many settings words it holds.
 //
 // EffectLink 10 and SoundLink 73 (3DS) put effects/assets and action triggers
 // into pools shared by every user; a user lists pool indices and stores a -1
@@ -26,6 +27,10 @@ namespace xl::eslink_codec {
 
         constexpr u32 PoolMarker = 0xFFFFFFFF;
         constexpr u32 AliasKind = 2, EmptyKind = 3;
+
+        // Words after the counts and trailer of a SoundLink 50 or 69 user header.
+        u64 settings_words(u32 version) { return version == 50 ? 7 : 4; }
+        u64 plain_user_header(u32 version) { return 0x20 + 4 * settings_words(version); }
 
         class LinkReader {
         public:
@@ -52,7 +57,7 @@ namespace xl::eslink_codec {
             }
             void read_eflk9(Node& file);
             void read_pooled(Node& file);
-            void read_slnk69(Node& file);
+            void read_slnk_plain(Node& file);
 
             Reader r;
             bool m_effect;
@@ -140,7 +145,7 @@ namespace xl::eslink_codec {
             }
         }
 
-        void LinkReader::read_slnk69(Node& file) {
+        void LinkReader::read_slnk_plain(Node& file) {
             const FamilySchemas& fs = schemas();
             const u32 n_user = r.u32_at(0xC);
             const u64 strings = 0x10 + 4 * u64 { n_user };
@@ -153,16 +158,16 @@ namespace xl::eslink_codec {
                 Node& u = file.list(file::Users).append(std::make_unique<Node>(&fs.user));
                 const u32 kind = r.u32_at(at);
                 if (kind == AliasKind || kind == EmptyKind)
-                    throw Error("SLink 69 user at " + hex(at) + " has kind " + std::to_string(kind)
-                        + ", which is not understood");
+                    throw Error("SLink " + std::to_string(m_version) + " user at " + hex(at) + " has kind "
+                        + std::to_string(kind) + ", which is not understood");
                 u.set_i(user::Kind, kind);
                 u.set_i(user::Type, UT_User);
                 u.set_s(user::Name, read_pool_string(r, strings, r.u32_at(at + 8), "user name"));
                 const u32 n_c = r.u32_at(at + 12), n_a = r.u32_at(at + 16), n_s = r.u32_at(at + 20),
                           n_t = r.u32_at(at + 24);
                 const u64 trailer = at + r.u32_at(at + 28);
-                for (int k = 0; k < 4; ++k)
-                    u.set_i(user::Header1 + k, r.u32_at(at + 32 + 4 * k));
+                for (u64 k = 0; k < settings_words(m_version); ++k)
+                    u.set_i(user::Header1 + static_cast<int>(k), r.u32_at(at + 32 + 4 * k));
                 u64 rec_strings = strings;
                 if (r.u32_at(trailer) != 0) {
                     const u64 next = i + 1 < n_user ? r.u32_at(0x10 + 4 * u64 { i + 1 }) : r.size();
@@ -170,7 +175,7 @@ namespace xl::eslink_codec {
                     u.set_s(user::StringPool, region(trailer, std::max(trailer, next)));
                     rec_strings = trailer;
                 }
-                u64 p = at + 0x30;
+                u64 p = at + plain_user_header(m_version);
                 read_records(fs.call, u.list(user::CallTables), p, n_c, rec_strings);
                 p += u64 { n_c } * fs.call.size();
                 read_records(fs.action, u.list(user::Actions), p, n_a, rec_strings);
@@ -288,15 +293,16 @@ namespace xl::eslink_codec {
             Document doc;
             doc.format = m_effect ? Format::ELink : Format::SLink;
             doc.endian = r.endian();
-            if (m_effect ? (m_version != 9 && m_version != 10) : (m_version != 69 && m_version != 73))
+            if (m_effect ? (m_version != 9 && m_version != 10)
+                         : (m_version != 50 && m_version != 69 && m_version != 73))
                 throw Error(format_name(doc.format) + " version " + std::to_string(m_version) + " is not supported");
             doc.root = std::make_unique<Node>(&schemas().file);
             Node& file = *doc.root;
             file.set_i(file::Version, m_version);
             if (m_effect && m_version == 9)
                 read_eflk9(file);
-            else if (!m_effect && m_version == 69)
-                read_slnk69(file);
+            else if (!m_effect && (m_version == 50 || m_version == 69))
+                read_slnk_plain(file);
             else
                 read_pooled(file);
             doc.encoding = detect_encoding(file.s(file::StringPool), Encoding::ShiftJis);
@@ -324,7 +330,7 @@ namespace xl::eslink_codec {
             bool uses_own_strings(const Node& u) const;
             void write_params(const Node& u, const NodeList& slots, u64 per_slot);
             Buffer write_eflk9();
-            Buffer write_slnk69();
+            Buffer write_slnk_plain(u32 version);
             Buffer write_pooled();
 
             const Document& d;
@@ -423,11 +429,24 @@ namespace xl::eslink_codec {
             return std::move(w.buffer());
         }
 
-        Buffer LinkWriter::write_slnk69() {
+        // Rows of `list` in the order they are written: by name for SoundLink 50,
+        // whose game finds call tables and actions by binary search, as they are
+        // otherwise.
+        std::vector<int> written_order(const NodeList& list, int name_field, bool sorted) {
+            std::vector<int> order(static_cast<std::size_t>(list.size()));
+            for (int k = 0; k < list.size(); ++k)
+                order[static_cast<std::size_t>(k)] = k;
+            if (sorted)
+                std::stable_sort(order.begin(), order.end(),
+                    [&](int a, int b) { return list.at(a).s(name_field) < list.at(b).s(name_field); });
+            return order;
+        }
+
+        Buffer LinkWriter::write_slnk_plain(u32 version) {
             const NodeList& users = file.list(file::Users);
             w.bytes(std::string_view("SLNK"));
             w.w32(0);
-            w.w32(69);
+            w.w32(version);
             w.w32(static_cast<u32>(users.size()));
             const std::size_t offsets = w.pos();
             w.zeros(4 * u64(users.size()));
@@ -451,13 +470,14 @@ namespace xl::eslink_codec {
             for (int i = 0; i < users.size(); ++i) {
                 const Node& u = users.at(i);
                 if (u.i(user::Type) != UT_User)
-                    throw Error("SLink 69 has no aliases; user " + u.s(user::Name) + " needs converting first");
+                    throw Error("SLink " + std::to_string(version) + " has no aliases; user " + u.s(user::Name)
+                        + " needs converting first");
                 const std::size_t at = w.pos();
                 w.patch_u32(offsets + 4 * i, static_cast<u32>(at));
                 const bool own = uses_own_strings(u);
                 StringPool own_pool(own ? u.s(user::StringPool) : std::string());
                 StringPool& strings = own ? own_pool : m_global;
-                const u64 tables = 0x30 + fs.call.size() * u64(u.list(user::CallTables).size())
+                const u64 tables = plain_user_header(version) + fs.call.size() * u64(u.list(user::CallTables).size())
                     + fs.action.size() * u64(u.list(user::Actions).size())
                     + fs.asset.size() * u64(u.list(user::Assets).size())
                     + fs.trigger.size() * u64(u.list(user::Triggers).size());
@@ -467,12 +487,32 @@ namespace xl::eslink_codec {
                 for (const int l : { user::CallTables, user::Actions, user::Assets, user::Triggers })
                     w.w32(static_cast<u32>(u.list(l).size()));
                 w.w32(static_cast<u32>(tables));
-                for (int k = 0; k < 4; ++k)
-                    w.w32(static_cast<u32>(u.i(user::Header1 + k)));
-                write_records(fs.call, u.list(user::CallTables), strings);
-                write_records(fs.action, u.list(user::Actions), strings);
+                for (u64 k = 0; k < settings_words(version); ++k)
+                    w.w32(static_cast<u32>(u.i(user::Header1 + static_cast<int>(k))));
+                const NodeList& calls = u.list(user::CallTables);
+                const NodeList& actions = u.list(user::Actions);
+                const std::vector<int> call_order = written_order(calls, fs.call.name_field, version == 50);
+                for (const int k : call_order)
+                    write_record(fs.call, calls.at(k), strings);
+                for (const int k : written_order(actions, fs.action.name_field, version == 50))
+                    write_record(fs.action, actions.at(k), strings);
                 write_records(fs.asset, u.list(user::Assets), strings);
-                write_records(fs.trigger, u.list(user::Triggers), strings);
+                // Triggers name their call table by index, which follows it to its
+                // written row.
+                std::vector<s64> call_row(call_order.size());
+                for (std::size_t k = 0; k < call_order.size(); ++k)
+                    call_row[static_cast<std::size_t>(call_order[k])] = static_cast<s64>(k);
+                const int call_field = fs.trigger.schema.field_index("Call");
+                for (const auto& t : u.list(user::Triggers)) {
+                    const s64 c = t->i(call_field);
+                    if (c < 0 || c >= static_cast<s64>(call_row.size()) || call_row[static_cast<std::size_t>(c)] == c) {
+                        write_record(fs.trigger, *t, strings);
+                        continue;
+                    }
+                    const auto moved = t->clone();
+                    moved->set_i(call_field, call_row[static_cast<std::size_t>(c)]);
+                    write_record(fs.trigger, *moved, strings);
+                }
                 if (own) {
                     w.bytes(own_pool.bytes());
                     w.align(4);
@@ -607,10 +647,9 @@ namespace xl::eslink_codec {
                     return write_eflk9();
                 if (v == 10)
                     return write_pooled();
-            } else if (&fs == &sound_link(69)) {
-                if (v == 69)
-                    return write_slnk69();
-            } else if (v == 73) {
+            } else if ((v == 50 || v == 69) && &fs == &sound_link(v)) {
+                return write_slnk_plain(v);
+            } else if (v == 73 && &fs == &sound_link(73)) {
                 return write_pooled();
             }
             throw Error(

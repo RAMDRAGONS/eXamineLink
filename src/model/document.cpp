@@ -46,6 +46,7 @@ namespace xl {
             { F::ELink0, 0, "ELink0" },
             { F::ELink, 9, "ELink v9" },
             { F::ELink, 10, "ELink v10 (shared pools)" },
+            { F::SLink, 50, "SLink v50" },
             { F::SLink, 69, "SLink v69" },
             { F::SLink, 73, "SLink v73 (shared pools)" },
             { F::ELink2, 19, "ELink2 v19" },
@@ -94,6 +95,7 @@ namespace xl {
                 "Splatoon Raiders, Nintendo Switch Sports Resort, Mario Kart World (Switch 2)",
                 F::ELink2, 36, Little, Utf8 },
             // Sounds.
+            { "lounge", "Animal Crossing Plaza (Wii U)", F::SLink, 50, Big, Sjis },
             { "turbo", "Mario Kart 8 (Wii U)", F::SLink, 69, Big, Sjis },
             { "alice", "The Legend of Zelda: Tri Force Heroes (3DS)", F::SLink, 69, Little, Sjis },
             { "takumi", "Animal Crossing: Happy Home Designer (3DS)", F::SLink, 73, Little, Sjis },
@@ -166,7 +168,7 @@ namespace xl {
         using namespace xlink;
         // SoundLink 73 users have no distance settings.
         if (doc.format == Format::SLink && doc.version() == 73 && &s == &eslink::sound_link(73).user)
-            return field < eslink::user::Header1 || field > eslink::user::Header4;
+            return field < eslink::user::Header1 || field > eslink::user::Header7;
         if (is_xlink(doc.format) && &s == &schemas().user && field == user::GlobalPropertyCount)
             return doc.version() != 19 && xlink_modern::has_global_count(doc.version(), xlink_system(doc.format));
         if (!narrow_xlink(doc))
