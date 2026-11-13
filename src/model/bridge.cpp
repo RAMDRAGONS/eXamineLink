@@ -41,7 +41,8 @@ namespace xl {
 
         // Users of `src` in `doc`'s encoding, an older format's in its plain version.
         Document normalized(const Document& src, const Document& doc, std::vector<std::string>& warnings) {
-            const u32 v = is_xlink(src.format) ? src.version() : plain_version(src.format);
+            const u32 v
+                = is_xlink(src.format) || src.format == Format::ELink0 ? src.version() : plain_version(src.format);
             std::vector<std::string> losses;
             Document out = convert(src, Target { src.format, v, doc.endian, doc.encoding }, losses);
             for (const auto& l : losses)
@@ -1327,6 +1328,8 @@ namespace xl {
             return "no database";
         if (doc.format == src.format)
             return { };
+        if (doc.format == Format::ELink0 || src.format == Format::ELink0)
+            return "ELink0 users only go into ELink0 databases";
         if (src.format != counterpart(doc.format))
             return "effect and sound databases hold different things";
         if (is_xlink(doc.format) && doc.version() == 19)

@@ -44,7 +44,7 @@ ImportUsersDialog::ImportUsersDialog(const Document& doc, const Document& src, c
     resize(560, 620);
     auto* layout = new QVBoxLayout(this);
     layout->addWidget(new QLabel(
-        tr("From %1 (%2 v%3)").arg(QFileInfo(src_path).fileName(), qs(format_name(src.format))).arg(src.version())));
+        tr("From %1 (%2)").arg(QFileInfo(src_path).fileName(), qs(version_name(src.format, src.version())))));
 
     m_filter = new QLineEdit;
     m_filter->setObjectName("filter");

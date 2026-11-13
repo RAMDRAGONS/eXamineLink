@@ -16,7 +16,7 @@ namespace xl {
 
     bool is_xlink(Format f) { return f == Format::ELink2 || f == Format::SLink2; }
 
-    bool is_effect(Format f) { return f == Format::ELink || f == Format::ELink2; }
+    bool is_effect(Format f) { return f == Format::ELink0 || f == Format::ELink || f == Format::ELink2; }
 
     int xlink_system(Format f) { return static_cast<int>(is_effect(f) ? xlink::System::ELink : xlink::System::SLink); }
 
@@ -34,6 +34,8 @@ namespace xl {
             return Format::ELink;
         case Format::SLink2:
             return Format::SLink;
+        case Format::ELink0:
+            break;
         }
         return f;
     }
@@ -41,6 +43,7 @@ namespace xl {
     const std::vector<Version>& versions() {
         using F = Format;
         static const std::vector<Version> v = {
+            { F::ELink0, 0, "ELink0" },
             { F::ELink, 9, "ELink v9" },
             { F::ELink, 10, "ELink v10 (shared pools)" },
             { F::SLink, 69, "SLink v69" },
@@ -75,6 +78,7 @@ namespace xl {
         constexpr Encoding Sjis = Encoding::ShiftJis, Utf8 = Encoding::Utf8;
         static const std::vector<Preset> p = {
             // Effects.
+            { "lunch", "Nintendo Land (Wii U)", F::ELink0, 0, Big, Sjis },
             { "turbo", "Mario Kart 8 (Wii U)", F::ELink, 9, Big, Sjis },
             { "takumi", "Animal Crossing: Happy Home Designer (3DS)", F::ELink, 10, Little, Sjis },
             { "gambit", "Splatoon (Wii U)", F::ELink2, 19, Big, Sjis },
@@ -132,13 +136,21 @@ namespace xl {
             return "ELink2";
         case Format::SLink2:
             return "SLink2";
+        case Format::ELink0:
+            return "ELink0";
         }
         return { };
     }
 
+    std::string version_name(Format f, u32 version) {
+        if (f == Format::ELink0)
+            return format_name(f);
+        return format_name(f) + " v" + std::to_string(version);
+    }
+
     u32 Document::version() const {
-        // Version is the first field of every root schema.
-        return root ? static_cast<u32>(root->i(0)) : 0;
+        // Version is the first field of every versioned root schema.
+        return root && format != Format::ELink0 ? static_cast<u32>(root->i(0)) : 0;
     }
 
     namespace {
@@ -214,7 +226,7 @@ namespace xl {
 
     bool is_database(Bytes payload) {
         const Reader r(payload, Endian::Big);
-        return r.magic_at(0, "XLNK") || r.magic_at(0, "eflk") || r.magic_at(0, "SLNK");
+        return r.magic_at(0, "XLNK") || r.magic_at(0, "eflk") || r.magic_at(0, "SLNK") || r.magic_at(0, "BLNK");
     }
 
     Document read_database(Bytes payload) {
@@ -234,8 +246,8 @@ namespace xl {
         if (r.magic_at(0, "eflk") || r.magic_at(0, "SLNK"))
             return dslink_codec::read(payload);
         if (r.magic_at(0, "BLNK"))
-            throw Error("BLNK ELink databases are not supported");
-        throw Error("not a link database (XLNK, eflk or SLNK)");
+            return elink0_codec::read(payload);
+        throw Error("not a link database (XLNK, eflk, SLNK or BLNK)");
     }
 
     Buffer write_database(const Document& doc) {
@@ -251,6 +263,8 @@ namespace xl {
         case Format::ELink:
         case Format::SLink:
             return dslink_codec::write(doc);
+        case Format::ELink0:
+            return elink0_codec::write(doc);
         }
         throw Error("unknown format");
     }
@@ -306,6 +320,8 @@ namespace xl {
             return base;
         if (is_xlink(doc.format))
             return base + (is_effect(doc.format) ? ".belnk" : ".bslnk");
+        if (doc.format == Format::ELink0)
+            return base + ".belink";
         return base + ".bin";
     }
 

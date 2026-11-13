@@ -7,6 +7,7 @@
 #include "core/crc32.hpp"
 #include "formats/codecs.hpp"
 #include "model/dslink_schema.hpp"
+#include "model/elink0_schema.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
 
@@ -46,6 +47,10 @@ namespace xl {
                 file.set_i(file::ConditionCountBias, 0);
                 for (auto& c : file.list(file::Conditions))
                     c->set_i(cond::PoolOffset, -1);
+                return;
+            }
+            if (d.format == Format::ELink0) {
+                file.set_s(elink0::file::StringPool, { });
                 return;
             }
             file.set_s(dslink::file::StringPool, { });
@@ -465,6 +470,8 @@ namespace xl {
         case Format::ELink:
         case Format::SLink:
             convert_old_link(d, doc, t, losses);
+            break;
+        case Format::ELink0:
             break;
         }
         return d;

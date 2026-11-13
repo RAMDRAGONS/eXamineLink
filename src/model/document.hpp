@@ -10,18 +10,20 @@
 
 namespace xl {
 
-    // The four link systems. ELink and SLink are the separate effect and sound
-    // formats XLink replaced; ELink2 and SLink2 are XLink's effect and sound
-    // databases, which share one layout and codec but carry their own versions.
-    enum class Format { ELink, SLink, ELink2, SLink2 };
+    // The link systems. ELink0 links effects and sounds in one record and has no
+    // version; ELink and SLink are the separate effect and sound formats XLink
+    // replaced; ELink2 and SLink2 are XLink's effect and sound databases, which
+    // share one layout and codec but carry their own versions.
+    enum class Format { ELink0, ELink, SLink, ELink2, SLink2 };
 
     bool is_xlink(Format f);
+    // ELink0 counts as an effect format: its databases sit with the effects.
     bool is_effect(Format f);
     // The system index XLink files and layouts use: 0 effects, 1 sounds.
     int xlink_system(Format f);
     Format xlink_format(int system);
     // The format that replaced (or was replaced by) `f`: ELink and ELink2,
-    // SLink and SLink2.
+    // SLink and SLink2. ELink0 has none and is its own.
     Format counterpart(Format f);
 
     // A version eXamineLink can write.
@@ -65,6 +67,8 @@ namespace xl {
     const Preset* find_preset(const std::string& key, Format f);
 
     std::string format_name(Format f);
+    // "ELink2 v36", or the bare name of a format without versions.
+    std::string version_name(Format f, u32 version);
 
     struct Document {
         Format format = Format::ELink2;

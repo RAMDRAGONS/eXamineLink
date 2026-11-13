@@ -5,6 +5,7 @@
 
 #include "formats/codecs.hpp"
 #include "model/dslink_schema.hpp"
+#include "model/elink0_schema.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
 
@@ -28,6 +29,7 @@ namespace xl {
             void references();
             void xlink();
             void dslink();
+            void elink0();
 
             const Document& doc;
             std::vector<Issue> issues;
@@ -248,6 +250,36 @@ namespace xl {
             }
         }
 
+        void Checker::elink0() {
+            using namespace xl::elink0;
+            std::set<std::string> names;
+            for (const auto& up : doc.root->list(file::Users)) {
+                const Node& u = *up;
+                const std::string& name = u.s(user::Name);
+                if (name.empty())
+                    add(Severity::Warning, &u,
+                        where(u) + ": a user without a name cannot be listed; its records save as unlisted records");
+                else if (!names.insert(name).second)
+                    add(Severity::Warning, &u, where(u) + ": another user has this name; the game finds the first");
+            }
+            walk_const(*doc.root, [&](const Node& r) {
+                if (&r.schema() != &schemas().record)
+                    return;
+                // The game reads a frame below -1 as the negated offset of a named
+                // trigger's string.
+                for (int k = 0; k < record::FrameCount; ++k)
+                    if (r.i(record::Frame1 + k) < -1 && r.s(record::Trigger1 + k).empty())
+                        add(Severity::Error, &r,
+                            where(r) + ": Frame" + std::to_string(k + 1)
+                                + " is below -1, which the game reads as the place of a trigger name");
+                // Ground materials index a seven-entry table; anything past them,
+                // negative values included, reads beyond it.
+                const s64 variant = r.i(record::Variant);
+                if (variant < 0 || variant >= static_cast<s64>(VariantNames.size()))
+                    add(Severity::Error, &r, where(r) + ": Variant must be one of the game's 18 names");
+            });
+        }
+
     } // namespace
 
     std::string severity_name(Severity s) {
@@ -271,6 +303,8 @@ namespace xl {
         c.references();
         if (is_xlink(doc.format))
             c.xlink();
+        else if (doc.format == Format::ELink0)
+            c.elink0();
         else
             c.dslink();
         if (try_write) {

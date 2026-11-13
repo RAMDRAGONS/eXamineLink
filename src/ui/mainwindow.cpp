@@ -35,6 +35,7 @@
 #include "model/bridge.hpp"
 #include "model/convert.hpp"
 #include "model/dslink_schema.hpp"
+#include "model/elink0_schema.hpp"
 #include "model/factory.hpp"
 #include "model/xlink_schema.hpp"
 #include "model/xml_io.hpp"
@@ -100,6 +101,12 @@ namespace {
                 { QObject::tr("Properties"), { user::Properties, user::PropertyTriggers } },
                 { QObject::tr("Always"), { user::AlwaysTriggers } },
                 { QObject::tr("User"), { user::UserParams, user::LocalProperties } } };
+        }
+        if (doc.format == Format::ELink0) {
+            using namespace elink0;
+            if (root)
+                return { { QObject::tr("Unlisted Records"), { file::UnlistedRecords } } };
+            return { { QObject::tr("Records"), { user::Records } } };
         }
         using namespace dslink;
         if (root)

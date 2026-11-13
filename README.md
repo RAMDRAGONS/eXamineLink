@@ -12,10 +12,13 @@ effects and sounds:
 | | 10 (shared pools) | Animal Crossing: Happy Home Designer (3DS) |
 | SLink (`SLNK`) | 69 | Mario Kart 8 (Wii U), The Legend of Zelda: Tri Force Heroes (3DS) |
 | | 73 (shared pools) | Animal Crossing: Happy Home Designer (3DS) |
+| ELink0 (`BLNK`, `.belink`) | none; effects and sounds in one record | Nintendo Land (Wii U) |
 
 Databases open straight from their containers: Yaz-compressed SARC
 archives (`.szs`, `.sbelnk`, `.sbslnk`), Zstandard (`.zs`) or uncompressed.
-Saving puts the same containers back.
+Saving puts the same containers back. Nintendo Land keeps its `ELink/<Scene>.szs`
+archives inside the packs in `content/Common/Package`; take them out with a
+SARC tool first.
 
 Some games compress with Zstandard dictionaries (Tears of the Kingdom's
 `.zs` files). Put the game's dictionary pack (`romfs/Pack/ZsDic.pack.zs`,
@@ -104,6 +107,7 @@ Effect presets:
 
 | Preset | Games | Version | Byte order | Encoding |
 |---|---|---|---|---|
+| `lunch` | Nintendo Land (Wii U) | ELink0 | big | Shift-JIS |
 | `turbo` | Mario Kart 8 (Wii U) | ELink 9 | big | Shift-JIS |
 | `takumi` | Animal Crossing: Happy Home Designer (3DS) | ELink 10 | little | Shift-JIS |
 | `gambit` | Splatoon (Wii U) | ELink2 19 | big | Shift-JIS |

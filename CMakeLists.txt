@@ -43,6 +43,7 @@ add_library(xl_core STATIC
   src/model/node.cpp
   src/model/xlink_schema.cpp
   src/model/dslink_schema.cpp
+  src/model/elink0_schema.cpp
   src/model/document.cpp
   src/model/edit.cpp
   src/model/value_text.cpp
@@ -55,6 +56,7 @@ add_library(xl_core STATIC
   src/formats/xlink_v19.cpp
   src/formats/xlink_modern.cpp
   src/formats/dslink.cpp
+  src/formats/elink0.cpp
 )
 target_include_directories(xl_core PUBLIC src)
 target_link_libraries(xl_core PUBLIC xl_zstd Qt6::Core)

@@ -28,6 +28,12 @@ namespace xl {
         Buffer write(const Document& doc);
     } // namespace xlink_v19
 
+    // ELink0 (Nintendo Land).
+    namespace elink0_codec {
+        Document read(Bytes data);
+        Buffer write(const Document& doc);
+    } // namespace elink0_codec
+
     // EffectLink 9 and 10, SoundLink 69 and 73.
     namespace dslink_codec {
         Document read(Bytes data);

@@ -5,6 +5,7 @@
 
 #include "core/crc32.hpp"
 #include "model/dslink_schema.hpp"
+#include "model/elink0_schema.hpp"
 #include "model/xlink_schema.hpp"
 
 namespace xl {
@@ -88,6 +89,26 @@ namespace xl {
                 n->set_i(curve::PropIdx, -1);
             } else if (el == &S.pdef) {
                 n->set_s(pdef::Name, "NewParam");
+            }
+            return n;
+        }
+
+        if (doc.format == Format::ELink0) {
+            using namespace elink0;
+            if (el == &schemas().user) {
+                n->set_s(user::Name, "NewUser");
+            } else if (el == &schemas().record) {
+                // What most shipped records hold: no frames, full scale, colour,
+                // volume and pitch, and the controller's own effect group.
+                n->set_s(record::Event, "NewEvent");
+                for (const int f : { record::Scale, record::Red, record::Green, record::Blue, record::Alpha,
+                         record::Volume, record::Pitch })
+                    n->set_f32(f, 1.0f);
+                for (int k = 0; k < record::FrameCount; ++k)
+                    n->set_i(record::Frame1 + k, -1);
+                n->set_i(record::StopFrame, -1);
+                n->set_i(record::PlayType, 1);
+                n->set_i(record::Group, -1);
             }
             return n;
         }

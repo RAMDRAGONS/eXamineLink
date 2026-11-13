@@ -67,9 +67,8 @@ namespace {
     }
 
     std::string summary(const Document& d) {
-        std::string s = format_name(d.format) + " v" + std::to_string(d.version()) + ", "
-            + (d.endian == Endian::Big ? "big" : "little") + "-endian, "
-            + (d.encoding == Encoding::ShiftJis ? "Shift-JIS" : "UTF-8") + ", " + describe(d.layers);
+        std::string s = version_name(d.format, d.version()) + ", " + (d.endian == Endian::Big ? "big" : "little")
+            + "-endian, " + (d.encoding == Encoding::ShiftJis ? "Shift-JIS" : "UTF-8") + ", " + describe(d.layers);
         const NodeList& users = d.root->list(d.root->list_count() - 1);
         s += ", " + std::to_string(users.size()) + " users";
         // A database alone cannot tell apart games that share its settings.
@@ -944,7 +943,7 @@ int main(int argc, char** argv) {
                         continue;
                     const Version* v = find_version(p.format, p.version);
                     std::printf("  %-14s %s: %s, %s-endian, %s\n", p.key.c_str(), p.name.c_str(),
-                        v ? v->label.c_str() : (format_name(p.format) + " v" + std::to_string(p.version)).c_str(),
+                        v ? v->label.c_str() : version_name(p.format, p.version).c_str(),
                         p.endian == Endian::Big ? "big" : "little",
                         p.encoding == Encoding::Utf8 ? "UTF-8" : "Shift-JIS");
                 }
@@ -1008,7 +1007,7 @@ int main(int argc, char** argv) {
             };
             bool ok = true;
             const Document there = trip(target, source, ok);
-            if (!is_xlink(source.format)) {
+            if (source.format == Format::ELink || source.format == Format::SLink) {
                 const Document back = trip(source, there, ok);
                 const auto diffs = playback_differences(source, back);
                 for (std::size_t k = 0; k < diffs.size() && k < 20; ++k)

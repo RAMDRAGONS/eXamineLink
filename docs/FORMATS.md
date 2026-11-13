@@ -223,6 +223,61 @@ asset +0x08, +0x10, +0x18 label, +0x20, +0x54; its triggers name their call
 by index). Words the loaders overwrite at run time are kept but hidden.
 ELink parameter words belong to the user's effect slots.
 
+## ELink0 (`BLNK`)
+
+From Nintendo Land 1.0.0's loader (`Lunch.rpx`), which binds a database in
+place and fills in its run-time words. Every number is big-endian; the size
+word decides the byte order on reading. Strings are offsets from the start
+of the entry holding them, and every hash is the CRC-32 of the string next
+to it, so both are rebuilt on save. No string has a byte above 0x7F, so the
+encoding is taken to be Shift-JIS.
+
+| Offset | Header (0x20) |
+| --- | --- |
+| 0x00 | `BLNK` |
+| 0x04 | file size |
+| 0x08 | user table position, 0x20 (nnfck reads this as version 32) |
+| 0x0C | user count |
+| 0x10 | record table position |
+| 0x14 | record count |
+| 0x18 | string table position |
+
+A user (0x14 bytes) is its name hash, first record, record count and name;
+the last word is the game's. The game finds a user by hash and plays the
+first of its records whose event hash matches and whose variant fits the
+model.
+
+| Offset | Record (0xCC) |
+| --- | --- |
+| 0x00 | user hash |
+| 0x04, 0x08 | event and emitter set hashes |
+| 0x0C | scale |
+| 0x10 | red, green, blue, alpha: copied into the emitter set's colour |
+| 0x20 | follow: 0 the whole transform, 1 without scale, 3 none, 4 without rotation, anything else position only |
+| 0x24 | nonzero: place the effect when emitted, then stop following |
+| 0x28 | bone hash |
+| 0x2C | position offset |
+| 0x38 | eight frames of the animations below that emit the record; the list ends at the first -1, and a value below -1 is the negated offset of a named trigger |
+| 0x58 | frame that stops the effect, -1 for none |
+| 0x5C | play type: 0 once, 1 on every trigger, 2 held (the sound loops) |
+| 0x60 | variant, by the game's names: 0 any owner; 1 to 10 (TV1 to TV4, DRC, Op0 to Op4) an owner of that variant; 11 to 17 (Sand, Water, Ground, Kusa, Rock, Mud, Snow) a ground material, Ground standing for any material no other record of the event names |
+| 0x64 to 0x80 | user, event, emitter set and bone names, four animation names |
+| 0x84, 0x86 | never read by the game; zero in every shipped database |
+| 0x85 | nonzero: the emitter set takes its controller's eight parameters |
+| 0x88 | effect group, -1 for the controller's |
+| 0x8C, 0x90 | camera shake: 0 none, 1 for 20 frames, 2 for 30, 3 or more for 60, with its strength (0 or less means 1) |
+| 0x94 to 0xB7 | the game's |
+| 0xB8 | sound name |
+| 0xBC, 0xC0 | sound volume and pitch |
+| 0xC4 | frames the sound fades over when the effect stops; -1 leaves it playing |
+| 0xC8 | the game's |
+
+Nintendo's tool sorts users by name, ignoring case, and writes their
+records in that order. Records under an empty user name come first and no
+user lists them, so the game loads but never plays them; eXamineLink keeps
+them apart as unlisted records. Strings are added in the order records use
+them (names, then trigger names, then the sound), then user names.
+
 ## Converting between versions
 
 Fields carry over by name between the schemas of two versions; anything
@@ -282,7 +337,7 @@ with an identical set, or its most common one.
 
 ## Not covered
 
-nnfck also identifies XLink 21, ELink `BLNK` 32 and SLink 50. No databases of those were available to
+nnfck also identifies XLink 21 and SLink 50. No databases of those were available to
 verify against, so eXamineLink does not open them. XLink 27 to 36 other than
 27 to 31, 33, 34 and 36 open with the layout of their width and save as
 their own version. ELink2 36 pairs with SLink2 33 in Tears of the Kingdom

@@ -13,6 +13,7 @@
 
 #include "model/convert.hpp"
 #include "model/dslink_schema.hpp"
+#include "model/elink0_schema.hpp"
 #include "model/value_text.hpp"
 #include "model/xlink_schema.hpp"
 
@@ -150,12 +151,14 @@ namespace xl::xml {
                 return &dslink::effect_link().file;
             case Format::SLink:
                 return &dslink::sound_link(version).file;
+            case Format::ELink0:
+                return &elink0::schemas().file;
             }
             return nullptr;
         }
 
         bool parse_format(const std::string& name, Format& f) {
-            for (const Format c : { Format::ELink, Format::SLink, Format::ELink2, Format::SLink2 })
+            for (const Format c : { Format::ELink0, Format::ELink, Format::SLink, Format::ELink2, Format::SLink2 })
                 if (format_name(c) == name) {
                     f = c;
                     return true;

@@ -60,8 +60,7 @@ SaveAsDialog::SaveAsDialog(const Document& doc, const QString& path, QWidget* pa
     // A version eXamineLink reads but has no samples to write from is kept as is.
     if (!find_version(doc.format, doc.version()))
         m_target->insertItem(0,
-            tr("%1 v%2 (as loaded)").arg(QString::fromStdString(format_name(doc.format))).arg(doc.version()),
-            doc.version());
+            tr("%1 (as loaded)").arg(QString::fromStdString(version_name(doc.format, doc.version()))), doc.version());
     m_target->setCurrentIndex(m_target->findData(doc.version()));
     form->addRow(tr("Version"), m_target);
 
