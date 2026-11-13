@@ -41,7 +41,7 @@ std::size_t transcode(Node& root, Encoding from, Encoding to) {
 // rebuilds them.
 void drop_string_layout(Document& d) {
   Node& file = *d.root;
-  if (d.format == Format::XLink) {
+  if (is_xlink(d.format)) {
     using namespace xlink;
     for (const int f : {file::NameTablePool, file::PdtStringPool, file::ConditionPool})
       file.set_s(f, {});
@@ -60,7 +60,7 @@ void convert_xlink(Document& d, const Document& src, const Target& t, std::vecto
   Node& file = *d.root;
   const u32 from = src.version();
   const bool from_v19 = from == 19, to_v19 = t.version == 19;
-  const bool to_wide = !to_v19 && xlink_modern::is_wide(t.version, src.system());
+  const bool to_wide = !to_v19 && xlink_modern::is_wide(t.version, xlink_system(src.format));
 
   // Tables kept from the original layout only fit that layout.
   drop_string_layout(d);
@@ -122,7 +122,7 @@ void convert_xlink(Document& d, const Document& src, const Target& t, std::vecto
     if (new_refs)
       losses.push_back(count_text(new_refs, "parameters use reference types newer than version 19"));
   }
-  if (!to_v19 && !xlink_modern::has_user_locals(t.version, src.system())) {
+  if (!to_v19 && !xlink_modern::has_user_locals(t.version, xlink_system(src.format))) {
     std::size_t user_locals = 0;
     for (auto& u : file.list(file::Users)) {
       user_locals += u->list(user::LocalProperties).size();
@@ -145,13 +145,13 @@ void convert_xlink(Document& d, const Document& src, const Target& t, std::vecto
   }
   // Versions with a global property count get the one Nintendo's tools
   // would write; the source's own is kept when it has one.
-  if (!to_v19 && xlink_modern::has_global_count(t.version, src.system()) &&
-      (from_v19 || !xlink_modern::has_global_count(from, src.system())))
+  if (!to_v19 && xlink_modern::has_global_count(t.version, xlink_system(src.format)) &&
+      (from_v19 || !xlink_modern::has_global_count(from, xlink_system(src.format))))
     for (auto& u : file.list(file::Users))
       u->set_i(user::GlobalPropertyCount, xlink_modern::global_property_count(file, *u));
   if (grids && (to_v19 || !to_wide))
     losses.push_back(count_text(grids, "grid containers cannot be stored by this version and lose their table"));
-  if (jumps && (to_v19 || !xlink_modern::has_global_count(t.version, src.system())))
+  if (jumps && (to_v19 || !xlink_modern::has_global_count(t.version, xlink_system(src.format))))
     losses.push_back(count_text(jumps, "jump containers are kept but this version's games cannot play them"));
   if (blend_by && (to_v19 || !to_wide)) {
     for (auto& u : file.list(file::Users))
@@ -160,7 +160,7 @@ void convert_xlink(Document& d, const Document& src, const Target& t, std::vecto
     losses.push_back(count_text(blend_by, "blend-by-property containers become plain blend containers and lose "
                                           "their property"));
   }
-  if (!to_wide && !to_v19 && xlink_modern::is_wide(from, src.system())) {
+  if (!to_wide && !to_v19 && xlink_modern::is_wide(from, xlink_system(src.format))) {
     std::size_t rounded = 0;
     for (const int l : {file::UserParamDefs, file::AssetParamDefs, file::TriggerParamDefs})
       for (auto& def : file.list(l))
@@ -213,7 +213,7 @@ std::unique_ptr<Node> transfer(const Node& src, const Schema* dst, std::map<std:
 // those are expanded into each user going there.
 void convert_old_link(Document& d, const Document& src, const Target& t, std::vector<std::string>& losses) {
   using namespace dslink;
-  const bool effect = d.format == Format::EffectLink;
+  const bool effect = d.format == Format::ELink;
   const bool to_wiiu = t.version == 9 || t.version == 69;
   const s64 kind = effect ? t.version : 1;
   const std::string noun = effect ? "effects" : "assets";
@@ -360,11 +360,8 @@ void convert_old_link(Document& d, const Document& src, const Target& t, std::ve
 std::vector<const Version*> conversion_targets(const Document& doc) {
   std::vector<const Version*> out;
   for (const Version& v : versions()) {
-    if (v.format != doc.format)
-      continue;
-    if (v.system >= 0 && v.system != doc.system())
-      continue;
-    out.push_back(&v);
+    if (v.format == doc.format)
+      out.push_back(&v);
   }
   return out;
 }
@@ -379,7 +376,7 @@ void swap_words(std::string& bytes, std::size_t width) {
 }
 
 void swap_raw_pools(Document& d) {
-  if (d.format != Format::XLink)
+  if (!is_xlink(d.format))
     return;
   Node& file = *d.root;
   for (const int f : {xlink::file::DirectValuePool, xlink::file::ConditionPool}) {
@@ -405,7 +402,7 @@ Target default_output(const Version& version, const Document& doc) {
   const Preset* best = nullptr;
   int best_score = -1;
   for (const Preset& p : presets()) {
-    if (preset_version(p, version.format, doc.system()) != version.version)
+    if (p.format != version.format || p.version != version.version)
       continue;
     const int score = (p.endian == doc.endian) * 2 + (p.encoding == doc.encoding);
     if (score > best_score) {
@@ -429,7 +426,7 @@ Document convert(const Document& doc, const Target& t, std::vector<std::string>&
   if (doc.encoding != t.encoding) {
     // Key name hashes are of the encoded name; those that match follow it.
     std::vector<Node*> hashed;
-    if (doc.format == Format::XLink)
+    if (is_xlink(doc.format))
       for (auto& u : d.root->list(xlink::file::Users))
         for (auto& c : u->list(xlink::user::Calls))
           if (static_cast<u32>(c->i(xlink::call::KeyNameHash)) == crc32(c->s(xlink::call::KeyName)))
@@ -448,11 +445,12 @@ Document convert(const Document& doc, const Target& t, std::vector<std::string>&
     return d;
   d.root->set_i(0, t.version);
   switch (doc.format) {
-    case Format::XLink:
+    case Format::ELink2:
+    case Format::SLink2:
       convert_xlink(d, doc, t, losses);
       break;
-    case Format::EffectLink:
-    case Format::SoundLink:
+    case Format::ELink:
+    case Format::SLink:
       convert_old_link(d, doc, t, losses);
       break;
   }

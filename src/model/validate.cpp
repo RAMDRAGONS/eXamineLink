@@ -73,8 +73,8 @@ void Checker::xlink() {
   using namespace xlink;
   const Node& file = *doc.root;
   const u32 v = doc.version();
-  const bool v19 = v == 19, wide = !v19 && xlink_modern::is_wide(v, doc.system());
-  const bool jumps = !v19 && xlink_modern::has_global_count(v, doc.system());
+  const bool v19 = v == 19, wide = !v19 && xlink_modern::is_wide(v, xlink_system(doc.format));
+  const bool jumps = !v19 && xlink_modern::has_global_count(v, xlink_system(doc.format));
 
   const auto check_params = [&](const Node& holder, int list, const NodeList& defs, bool full) {
     std::set<s64> seen;
@@ -224,7 +224,7 @@ void Checker::dslink() {
     for (int l = 0; l < u.list_count(); ++l)
       if (pooled_version && u.list(l).size() > 0xFFFF)
         add(Severity::Error, &u, where(u) + ": " + u.list(l).def().name + " exceeds 65535 entries");
-    if (doc.format == Format::EffectLink)
+    if (doc.format == Format::ELink)
       for (const auto& slot : *asset_list_of(u))
         if (slot->list(slot_params::Params).size() != u.i(user::ParamsPerAsset))
           add(Severity::Error, slot.get(), where(*slot) + ": has " + std::to_string(slot->list(slot_params::Params).size()) +
@@ -256,7 +256,7 @@ std::vector<Issue> validate(const Document& doc, bool try_write) {
   if (!doc.root)
     return {};
   c.references();
-  if (doc.format == Format::XLink)
+  if (is_xlink(doc.format))
     c.xlink();
   else
     c.dslink();

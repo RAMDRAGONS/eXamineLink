@@ -47,7 +47,7 @@ SaveAsDialog::SaveAsDialog(const Document& doc, const QString& path, QWidget* pa
   m_preset->setObjectName("preset");
   m_preset->addItem(tr("Custom"), -1);
   for (std::size_t k = 0; k < presets().size(); ++k)
-    if (preset_version(presets()[k], doc.format, doc.system()))
+    if (presets()[k].format == doc.format)
       m_preset->addItem(QString::fromStdString(presets()[k].name), static_cast<int>(k));
   form->addRow(tr("Preset"), m_preset);
 
@@ -56,7 +56,7 @@ SaveAsDialog::SaveAsDialog(const Document& doc, const QString& path, QWidget* pa
   for (const Version* v : conversion_targets(doc))
     m_target->addItem(QString::fromStdString(v->label), v->version);
   // A version eXamineLink reads but has no samples to write from is kept as is.
-  if (!find_version(doc.format, doc.version(), doc.system()))
+  if (!find_version(doc.format, doc.version()))
     m_target->insertItem(0, tr("%1 v%2 (as loaded)").arg(QString::fromStdString(format_name(doc.format))).arg(doc.version()),
                          doc.version());
   m_target->setCurrentIndex(m_target->findData(doc.version()));
@@ -115,7 +115,7 @@ SaveAsDialog::SaveAsDialog(const Document& doc, const QString& path, QWidget* pa
       return;
     const Preset& p = presets()[static_cast<std::size_t>(k)];
     m_syncing = true;
-    m_target->setCurrentIndex(m_target->findData(preset_version(p, m_doc.format, m_doc.system())));
+    m_target->setCurrentIndex(m_target->findData(p.version));
     m_endian->setCurrentIndex(m_endian->findData(static_cast<int>(p.endian)));
     m_encoding->setCurrentIndex(m_encoding->findData(static_cast<int>(p.encoding)));
     m_syncing = false;
@@ -125,7 +125,7 @@ SaveAsDialog::SaveAsDialog(const Document& doc, const QString& path, QWidget* pa
   connect(m_target, &QComboBox::currentIndexChanged, this, [this] {
     if (m_syncing)
       return;
-    if (const Version* v = find_version(m_doc.format, m_target->currentData().toUInt(), m_doc.system())) {
+    if (const Version* v = find_version(m_doc.format, m_target->currentData().toUInt())) {
       const Target d = default_output(*v, m_doc);
       m_syncing = true;
       m_endian->setCurrentIndex(m_endian->findData(static_cast<int>(d.endian)));
@@ -171,7 +171,7 @@ void SaveAsDialog::syncPreset() {
   int match = 0;
   for (int i = 1; i < m_preset->count() && !match; ++i) {
     const Preset& p = presets()[static_cast<std::size_t>(m_preset->itemData(i).toInt())];
-    if (preset_version(p, m_doc.format, m_doc.system()) == t.version && p.endian == t.endian &&
+    if (p.version == t.version && p.endian == t.endian &&
         p.encoding == t.encoding)
       match = i;
   }

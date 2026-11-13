@@ -463,7 +463,6 @@ void ModernReader::read_user(Node& file, Node& user, u64 at, u32 user_params) {
 Document ModernReader::run() {
   const auto& S = schemas();
   Document doc;
-  doc.format = Format::XLink;
   doc.endian = r.endian();
   doc.root = std::make_unique<Node>(&S.file);
   Node& file = *doc.root;
@@ -493,12 +492,9 @@ Document ModernReader::run() {
   const u64 offsets = g.wide ? align_up(hashes + 4 * u64{n_user}, 8) : hashes + 4 * u64{n_user};
   const u64 pdt = offsets + n_user * g.ptr();
   read_pdt(file, pdt);
-  file.set_i(file::System, static_cast<s64>(System::SLink));
-  for (const auto& d : file.list(file::AssetParamDefs))
-    if (d->s(pdef::Name) == "Eset")
-      file.set_i(file::System, static_cast<s64>(System::ELink));
   {
-    const int system = static_cast<int>(file.i(file::System));
+    const int system = static_cast<int>(system_of(file));
+    doc.format = xlink_format(system);
     g.user_locals = has_user_locals(version, system);
     g.global_count = has_global_count(version, system);
     g.switch_layout = g.wide ? 2 : switch_layout(version, system);
@@ -631,7 +627,7 @@ Document ModernReader::run() {
 class ModernWriter {
 public:
   ModernWriter(const Document& doc, u32 version)
-      : d(doc), file(*doc.root), w(doc.endian), g{geometry(version, static_cast<int>(doc.root->i(file::System)))},
+      : d(doc), file(*doc.root), w(doc.endian), g{geometry(version, xlink_system(doc.format))},
         m_names(file.s(file::NameTablePool)) {
     const std::string& dp = file.s(file::DirectValuePool);
     Reader pr(Bytes(reinterpret_cast<const u8*>(dp.data()), dp.size()), doc.endian);

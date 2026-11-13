@@ -43,7 +43,7 @@ std::unique_ptr<Node> default_param(const Node& def, int index) {
 std::unique_ptr<Node> make_element(const Document& doc, const NodeList& list) {
   const Schema* el = list.def().element;
   auto n = std::make_unique<Node>(el);
-  if (doc.format == Format::XLink) {
+  if (is_xlink(doc.format)) {
     using namespace xlink;
     const auto& S = schemas();
     const Node& file = *doc.root;
@@ -99,7 +99,7 @@ std::unique_ptr<Node> make_element(const Document& doc, const NodeList& list) {
   if (el == &fs->user) {
     n->set_s(user::Name, "NewUser");
     n->set_i(user::Type, UT_User);
-  } else if (doc.format == Format::EffectLink && (el == &fs->asset.schema || el == &fs->pool_ref_asset) &&
+  } else if (doc.format == Format::ELink && (el == &fs->asset.schema || el == &fs->pool_ref_asset) &&
              &list.owner()->schema() == &fs->user) {
     // Every effect of a user carries the same number of parameter words.
     const s64 words = list.owner()->i(user::ParamsPerAsset);
@@ -113,7 +113,7 @@ std::unique_ptr<Node> make_element(const Document& doc, const NodeList& list) {
 
 std::vector<FieldUpdate> follow_up_edits(const Document& doc, Node& n, int field, const Value& next) {
   std::vector<FieldUpdate> out;
-  if (doc.format != Format::XLink)
+  if (!is_xlink(doc.format))
     return out;
   using namespace xlink;
   const auto& S = schemas();

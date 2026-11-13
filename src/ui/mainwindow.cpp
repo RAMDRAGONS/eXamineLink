@@ -89,7 +89,7 @@ struct Group {
 // properties side by side, as the link editors grouped them.
 std::vector<Group> groups_for(const Document& doc, const Node& scope) {
   const bool root = !scope.parent();
-  if (doc.format == Format::XLink) {
+  if (is_xlink(doc.format)) {
     using namespace xlink;
     if (root)
       return {{QObject::tr("Definitions"), {file::UserParamDefs, file::AssetParamDefs, file::TriggerParamDefs}},
@@ -719,7 +719,7 @@ void MainWindow::duplicateNode(Node* n) {
     return;
   auto copy = n->clone();
   // XLink users are keyed by their name's hash and must stay distinct.
-  if (m_doc.format == Format::XLink && &n->schema() == &xlink::schemas().user) {
+  if (is_xlink(m_doc.format) && &n->schema() == &xlink::schemas().user) {
     const std::string name = n->s(xlink::user::Name).empty() ? "User" : n->s(xlink::user::Name);
     copy->set_s(xlink::user::Name, name + "_Copy");
     copy->set_i(xlink::user::Hash, crc32(name + "_Copy"));
@@ -912,7 +912,7 @@ void MainWindow::onImportUsers() {
 }
 
 void MainWindow::onLoadNames() {
-  if (!m_doc.root || m_doc.format != Format::XLink) {
+  if (!m_doc.root || !is_xlink(m_doc.format)) {
     QMessageBox::information(this, tr("Name users"), tr("Only XLink databases key users by name hash."));
     return;
   }
@@ -955,9 +955,9 @@ void MainWindow::onLoadNames() {
 void MainWindow::onAbout() {
   QMessageBox::about(
       this, tr("About eXamineLink"),
-      tr("<b>eXamineLink</b><br>Editor for Nintendo link databases: XLink (versions 19 to 36), "
-         "EffectLink (9, 10) and SoundLink (69, 73).<br><br>"
-         "Layouts follow nnfck, WoomLink and the xlink2 decompilation, checked against the games' own "
+      tr("<b>eXamineLink</b><br>Editor for Nintendo link databases: ELink2 and SLink2 (XLink versions 19 "
+         "to 36), ELink (9, 10) and SLink (69, 73).<br><br>"
+         "Layouts follow nnfck, WoomLink and the xlink2 tool, checked against the games' own "
          "loaders.<br><br>MIT License."));
 }
 
@@ -1026,7 +1026,7 @@ void MainWindow::userMenu(const QPoint& pos) {
     menu.addSeparator();
     const QString name = qs(to_utf8(user->label(), m_doc.encoding));
     menu.addAction(tr("Copy Name"), this, [name] { QApplication::clipboard()->setText(name); });
-    if (m_doc.format == Format::XLink)
+    if (is_xlink(m_doc.format))
       menu.addAction(tr("Copy Hash"), this, [user] {
         QApplication::clipboard()->setText(qs(hex(static_cast<u32>(user->i(xlink::user::Hash)), 8)));
       });

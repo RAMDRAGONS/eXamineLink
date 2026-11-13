@@ -4,7 +4,6 @@
 
 namespace xl::xlink {
 
-const std::vector<std::string> SystemNames = {"ELink", "SLink"};
 const std::vector<std::string> ParamTypeNames = {"Int", "Float", "Bool", "Enum", "String", "Bitfield"};
 const std::vector<std::string> RefTypeNames = {
     "Direct",          "String",          "Curve",           "Random",          "ArrangeGroup",    "Bitflag",
@@ -16,6 +15,13 @@ const std::vector<std::string> PropertyTypeNames = {"Enum", "S32", "F32"};
 const std::vector<std::string> CurveUpdateTypeNames = {"Update", "NoUpdate"};
 const std::vector<std::string> CompareTypeNames = {"Equal",    "GreaterThan",     "GreaterThanOrEqual",
                                                    "LessThan", "LessThanOrEqual", "NotEqual"};
+
+System system_of(const Node& file) {
+  for (const auto& d : file.list(file::AssetParamDefs))
+    if (d->s(pdef::Name) == "Eset")
+      return System::ELink;
+  return System::SLink;
+}
 
 bool is_random_ref(s64 t) {
   return t == RT_Random || (t >= 6 && t <= RT_RandomLast);
@@ -356,7 +362,6 @@ void build(Schemas& s) {
 
   s.file.name = "XLink";
   s.file.fields = {field("Version", FieldType::U32, "Resource version written on save"),
-                   enum_field("System", &SystemNames),
                    field("NumCustomAssetParam", FieldType::U32,
                          "How many of the last asset parameter definitions the game defines"),
                    hidden_field("NameTablePool", FieldType::String),
@@ -364,7 +369,6 @@ void build(Schemas& s) {
                    hidden_field("DirectValuePool", FieldType::String),
                    hidden_field("ConditionPool", FieldType::String),
                    hidden_field("ConditionCountBias", FieldType::S64)};
-  s.file.fields[file::System].read_only = true;
   s.file.lists = {{"UserParamDefines", &s.pdef},     {"AssetParamDefines", &s.pdef},
                   {"TriggerParamDefines", &s.pdef},  {"LocalPropertyNames", &s.name},
                   {"LocalPropertyEnumNames", &s.name}, {"Curves", &s.curve},
@@ -372,7 +376,7 @@ void build(Schemas& s) {
                   {"AssetParamSets", &s.pset},       {"TriggerParamSets", &s.pset},
                   {"Conditions", &s.cond},           {"Users", &s.user}};
   s.file.label = [](const Node& n) {
-    return enum_text(SystemNames, n.i(file::System)) + "2 v" + std::to_string(n.i(file::Version));
+    return std::string(system_of(n) == System::ELink ? "ELink2" : "SLink2") + " v" + std::to_string(n.i(file::Version));
   };
 }
 

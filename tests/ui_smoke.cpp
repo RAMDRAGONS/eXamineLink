@@ -218,14 +218,14 @@ int main(int argc, char** argv) {
     auto* preset = dlg.findChild<QComboBox*>("preset");
     if (!version || !preset)
       return fail("save as dialog");
-    if (preset->currentIndex() == 0 && xl::preset_for(doc.format, doc.version(), doc.system()) &&
-        xl::preset_for(doc.format, doc.version(), doc.system())->endian == doc.endian &&
-        xl::preset_for(doc.format, doc.version(), doc.system())->encoding == doc.encoding)
+    if (preset->currentIndex() == 0 && xl::preset_for(doc.format, doc.version()) &&
+        xl::preset_for(doc.format, doc.version())->endian == doc.endian &&
+        xl::preset_for(doc.format, doc.version())->encoding == doc.encoding)
       return fail("save as does not recognize the database's preset");
     for (int k = 0; k < version->count(); ++k) {
       version->setCurrentIndex(k);
       const xl::u32 v = version->currentData().toUInt();
-      const xl::Version* ver = xl::find_version(doc.format, v, doc.system());
+      const xl::Version* ver = xl::find_version(doc.format, v);
       const xl::Endian want = ver ? xl::default_output(*ver, doc).endian : doc.endian;
       if (dlg.target().endian != want)
         return fail("save as byte order default");
@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
       emit preset->activated(k);
       const xl::Preset& p = xl::presets()[static_cast<std::size_t>(preset->itemData(k).toInt())];
       const xl::Target t = dlg.target();
-      if (t.version != xl::preset_version(p, doc.format, doc.system()) || t.endian != p.endian ||
+      if (t.version != p.version || t.endian != p.endian ||
           t.encoding != p.encoding || preset->currentIndex() != k)
         return fail("save as preset");
     }

@@ -149,13 +149,13 @@ Differences from later versions:
   comes from the game, so it is inferred per property from the values used.
   Each user header repeats the condition, random and curve counts.
 
-## EffectLink (`eflk`) and SoundLink (`SLNK`)
+## ELink (`eflk`) and SLink (`SLNK`)
 
 From Mario Kart 8's loaders (`Turbo.rpx`, with symbols from the 2014 linker
 map) and Happy Home Designer's `eflk_*` / `slnk_*` functions. Strings are
 Shift-JIS.
 
-| | EffectLink 9 | SoundLink 69 | EffectLink 10 | SoundLink 73 |
+| | ELink 9 | SLink 69 | ELink 10 | SLink 73 |
 | --- | --- | --- | --- | --- |
 | Header | 0x10: users, name table | 0x10: size, users | 0x14: users, pools | 0x18: size, users, pools |
 | Users | position + name each | positions, then shared strings | shared assets and triggers, positions, shared strings | same |
@@ -165,7 +165,7 @@ Shift-JIS.
 | Asset / effect | 0x68 | 0x5C | 0x68 | 0x4C |
 | Action trigger | 0x3C | 0x4C | 0x3C | 0x40 |
 
-SoundLink 69 user settings at +0x20 are three floats and a flags word.
+SLink 69 user settings at +0x20 are three floats and a flags word.
 Mario Kart 8 (v81) passes the floats to its 3D sound calculation
 (`audio::AudCalc3DParam::setMaxVolumeDistPtr`, `setUnitDistPtr`,
 `setInteriorSizePtr`): the distance of full volume, the falloff's distance
@@ -212,15 +212,15 @@ byte order lays them out correctly:
 | Sound trigger | +0x18 | 16-bit, signed 16-bit |
 
 The two words after a sound action's name, and the last word of a
-SoundLink 69 trigger, are zero in every shipped file, so their width cannot
+SLink 69 trigger, are zero in every shipped file, so their width cannot
 be told; they are kept as 32-bit words.
 
-String fields were identified from the loaders (EffectLink 10: effect
+String fields were identified from the loaders (ELink 10: effect
 +0x08, +0x10, +0x18, +0x20 emitter set, +0x28 bone, +0x2C; trigger +0x08,
-+0x1C. SoundLink 73: asset +0x08, +0x10, +0x18 label, +0x44. SoundLink 69:
++0x1C. SLink 73: asset +0x08, +0x10, +0x18 label, +0x44. SLink 69:
 asset +0x08, +0x10, +0x18 label, +0x20, +0x54; its triggers name their call
 by index). Words the loaders overwrite at run time are kept but hidden.
-EffectLink parameter words belong to the user's effect slots.
+ELink parameter words belong to the user's effect slots.
 
 ## Converting between versions
 
@@ -232,9 +232,9 @@ without a counterpart is reported before saving.
   direct value table, and switch conditions take the property type inferred
   from their values. These mappings follow the loaders but were not seen
   working in a game.
-- EffectLink 9 and 10, SoundLink 69 and 73: going to a Wii U version, pooled
+- ELink 9 and 10, SLink 69 and 73: going to a Wii U version, pooled
   records are copied into each user that lists them (with that user's
-  parameter words) and aliases become copies of their base user. SoundLink
+  parameter words) and aliases become copies of their base user. SLink
   records are rebuilt field by field: 69's distance settings and surround
   panning have no place in 73 (going to 69, the distances are 0, which
   Mario Kart 8 replaces with its defaults), and a 69
@@ -242,13 +242,13 @@ without a counterpart is reported before saving.
   taken 69 to 73 to 69 differs from the original only in those values and
   in string table layout.
 
-## Between EffectLink or SoundLink and XLink
+## Between ELink or SLink and XLink
 
 Mario Kart 8 Deluxe ported Mario Kart 8's databases; matching their users
 by name hash (387 effect and 222 sound users) shows the mapping, which the
 user import follows:
 
-| EffectLink effect | ELink2 parameter |
+| ELink effect | ELink2 parameter |
 | --- | --- |
 | EmitterSet | RuntimeAssetName (AssetName is the call's key) |
 | Bone, Group | Bone, EffectGroup |
@@ -259,7 +259,7 @@ user import follows:
 | floats +0x3C to +0x64 | Scale, PositionXYZ, RotationXYZ, Red, Green, Blue, Alpha |
 | byte +0x31 with a matrix mode | clears BitFlag bit 1 (IsFollow), set otherwise |
 
-| SoundLink asset | SLink2 parameter |
+| SLink asset | SLink2 parameter |
 | --- | --- |
 | Label | RuntimeAssetName |
 | Volume, Pitch, Lpf, Pan, SurroundPan and their tops | the same, random when the top lies above |
@@ -273,7 +273,7 @@ order, keyed `Call_<value>` for containers, `Call_NN` for assets and
 triggers (start 0 to the end as the always type), their overrides an
 overwrite set. Parameters equal to their default are left out, except
 overrides, which replace the effect's value whatever it is. The parameter
-words EffectLink effects carry, SoundLink's distance settings, the
+words ELink effects carry, SLink's distance settings, the
 handover word and fields no ELink2 or SLink2 parameter matches are reported
 as dropped. The 16-bit hash beside a trigger's overwrite set follows the
 set by a scheme not yet known; new sets reuse the hash the database pairs
@@ -281,7 +281,7 @@ with an identical set, or its most common one.
 
 ## Not covered
 
-nnfck also identifies XLink 21, EffectLink `BLNK` 32 and SoundLink 50. No databases of those were available to
+nnfck also identifies XLink 21, ELink `BLNK` 32 and SLink 50. No databases of those were available to
 verify against, so eXamineLink does not open them. XLink 27 to 36 other than
 27 to 31, 33, 34 and 36 open with the layout of their width and save as
 their own version. ELink2 36 pairs with SLink2 33 in Tears of the Kingdom

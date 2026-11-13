@@ -154,7 +154,6 @@ void V19Reader::infer_switch_types() {
 Document V19Reader::run() {
   const auto& S = schemas();
   Document doc;
-  doc.format = Format::XLink;
   doc.endian = r.endian();
   doc.root = std::make_unique<Node>(&S.file);
   Node& file = *doc.root;
@@ -453,10 +452,7 @@ Document V19Reader::run() {
   for (Node* prm : m_arrange_params)
     prm->set_i(param::Value, arrange_index.at(static_cast<u64>(prm->i(param::Value))));
 
-  file.set_i(file::System, static_cast<s64>(System::SLink));
-  for (const auto& d : file.list(file::AssetParamDefs))
-    if (d->s(pdef::Name) == "Eset")
-      file.set_i(file::System, static_cast<s64>(System::ELink));
+  doc.format = xlink_format(static_cast<int>(system_of(file)));
   doc.encoding = detect_encoding(file.s(file::NameTablePool), Encoding::ShiftJis);
   return doc;
 }

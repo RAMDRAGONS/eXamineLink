@@ -7,7 +7,6 @@
 // saving into another version possible.
 namespace xl::xlink {
 
-extern const std::vector<std::string> SystemNames;
 extern const std::vector<std::string> ParamTypeNames;
 extern const std::vector<std::string> RefTypeNames;
 extern const std::vector<std::string> ContainerTypeNames;
@@ -22,12 +21,13 @@ enum ContainerType { CT_Switch, CT_Random, CT_Random2, CT_Blend, CT_Sequence, CT
 enum PropertyType { PR_Enum, PR_S32, PR_F32 };
 
 bool is_random_ref(s64 ref_type);
+// Effect databases define the "Eset" asset parameter; sound databases do not.
+System system_of(const Node& file);
 bool is_direct_table_ref(s64 ref_type);
 
 namespace file {
 enum Field {
   Version,
-  System,
   NumCustomAssetParam,
   // Original tables of the version the file was read from; reusing them keeps
   // an unedited file byte-identical.

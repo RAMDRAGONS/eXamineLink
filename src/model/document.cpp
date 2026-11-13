@@ -14,92 +14,127 @@
 
 namespace xl {
 
+bool is_xlink(Format f) {
+  return f == Format::ELink2 || f == Format::SLink2;
+}
+
+bool is_effect(Format f) {
+  return f == Format::ELink || f == Format::ELink2;
+}
+
+int xlink_system(Format f) {
+  return static_cast<int>(is_effect(f) ? xlink::System::ELink : xlink::System::SLink);
+}
+
+Format xlink_format(int system) {
+  return system == static_cast<int>(xlink::System::SLink) ? Format::SLink2 : Format::ELink2;
+}
+
+Format counterpart(Format f) {
+  switch (f) {
+    case Format::ELink:
+      return Format::ELink2;
+    case Format::SLink:
+      return Format::SLink2;
+    case Format::ELink2:
+      return Format::ELink;
+    case Format::SLink2:
+      return Format::SLink;
+  }
+  return f;
+}
+
 const std::vector<Version>& versions() {
+  using F = Format;
   static const std::vector<Version> v = {
-      {Format::XLink, 19, "XLink v19", -1},
-      {Format::XLink, 27, "SLink2 v27", 1},
-      {Format::XLink, 28, "SLink2 v28", 1},
-      {Format::XLink, 29, "ELink2 v29", 0},
-      {Format::XLink, 29, "SLink2 v29", 1},
-      {Format::XLink, 30, "ELink2 v30", 0},
-      {Format::XLink, 31, "ELink2 v31", 0},
-      {Format::XLink, 31, "SLink2 v31 (64-bit)", 1},
-      {Format::XLink, 33, "SLink2 v33 (64-bit)", 1},
-      {Format::XLink, 34, "ELink2 v34 (64-bit)", 0},
-      {Format::XLink, 34, "SLink2 v34 (64-bit)", 1},
-      {Format::XLink, 36, "ELink2 v36 (64-bit)", 0},
-      {Format::EffectLink, 9, "EffectLink v9"},
-      {Format::EffectLink, 10, "EffectLink v10 (shared pools)"},
-      {Format::SoundLink, 69, "SoundLink v69"},
-      {Format::SoundLink, 73, "SoundLink v73 (shared pools)"},
+      {F::ELink, 9, "ELink v9"},
+      {F::ELink, 10, "ELink v10 (shared pools)"},
+      {F::SLink, 69, "SLink v69"},
+      {F::SLink, 73, "SLink v73 (shared pools)"},
+      {F::ELink2, 19, "ELink2 v19"},
+      {F::SLink2, 19, "SLink2 v19"},
+      {F::SLink2, 27, "SLink2 v27"},
+      {F::SLink2, 28, "SLink2 v28"},
+      {F::ELink2, 29, "ELink2 v29"},
+      {F::SLink2, 29, "SLink2 v29"},
+      {F::ELink2, 30, "ELink2 v30"},
+      {F::ELink2, 31, "ELink2 v31"},
+      {F::SLink2, 31, "SLink2 v31 (64-bit)"},
+      {F::SLink2, 33, "SLink2 v33 (64-bit)"},
+      {F::ELink2, 34, "ELink2 v34 (64-bit)"},
+      {F::SLink2, 34, "SLink2 v34 (64-bit)"},
+      {F::ELink2, 36, "ELink2 v36 (64-bit)"},
   };
   return v;
 }
 
-const Version* find_version(Format f, u32 version, int system) {
+const Version* find_version(Format f, u32 version) {
   for (const Version& v : versions())
-    if (v.format == f && v.version == version && (v.system < 0 || system < 0 || v.system == system))
+    if (v.format == f && v.version == version)
       return &v;
   return nullptr;
 }
 
 const std::vector<Preset>& presets() {
   using F = Format;
+  constexpr Endian Big = Endian::Big, Little = Endian::Little;
+  constexpr Encoding Sjis = Encoding::ShiftJis, Utf8 = Encoding::Utf8;
   static const std::vector<Preset> p = {
-      {"turbo", "Mario Kart 8 (Wii U)", Endian::Big, Encoding::ShiftJis,
-       {{F::EffectLink, 9, -1}, {F::SoundLink, 69, -1}}},
-      {"alice", "The Legend of Zelda: Tri Force Heroes (3DS)", Endian::Little, Encoding::ShiftJis,
-       {{F::SoundLink, 69, -1}}},
-      {"takumi", "Animal Crossing: Happy Home Designer (3DS)", Endian::Little, Encoding::ShiftJis,
-       {{F::EffectLink, 10, -1}, {F::SoundLink, 73, -1}}},
-      {"gambit", "Splatoon (Wii U)", Endian::Big, Encoding::ShiftJis, {{F::XLink, 19, -1}}},
-      {"turbo-s-proto", "Mario Kart 8 Deluxe prototype (Switch)", Endian::Little, Encoding::ShiftJis,
-       {{F::XLink, 29, 0}, {F::XLink, 27, 1}}},
-      {"u-king", "The Legend of Zelda: Breath of the Wild (Wii U)", Endian::Big, Encoding::Utf8,
-       {{F::XLink, 30, 0}, {F::XLink, 28, 1}}},
-      {"u-king-s", "The Legend of Zelda: Breath of the Wild, Game Builder Garage (Switch)", Endian::Little, Encoding::Utf8,
-       {{F::XLink, 30, 0}, {F::XLink, 28, 1}}},
-      {"blitz", "Splatoon 2, ARMS, Mario Kart 8 Deluxe (Switch)", Endian::Little, Encoding::ShiftJis,
-       {{F::XLink, 30, 0}, {F::XLink, 28, 1}}},
-      {"park", "Animal Crossing: New Horizons (Switch)", Endian::Little, Encoding::Utf8,
-       {{F::XLink, 31, 0}, {F::XLink, 29, 1}}},
-      {"thunder", "Splatoon 3 (Switch)", Endian::Little, Encoding::Utf8, {{F::XLink, 34, 0}, {F::XLink, 31, 1}}},
-      {"ex-king", "The Legend of Zelda: Tears of the Kingdom (Switch)", Endian::Little, Encoding::Utf8,
-       {{F::XLink, 36, 0}, {F::XLink, 33, 1}}},
-      {"spiral", "Splatoon Raiders (Switch 2)", Endian::Little, Encoding::Utf8, {{F::XLink, 36, 0}, {F::XLink, 34, 1}}},
+      // Effects.
+      {"turbo", "Mario Kart 8 (Wii U)", F::ELink, 9, Big, Sjis},
+      {"takumi", "Animal Crossing: Happy Home Designer (3DS)", F::ELink, 10, Little, Sjis},
+      {"gambit", "Splatoon (Wii U)", F::ELink2, 19, Big, Sjis},
+      {"turbo-s-proto", "Mario Kart 8 Deluxe prototype (Switch)", F::ELink2, 29, Little, Sjis},
+      {"u-king", "The Legend of Zelda: Breath of the Wild (Wii U)", F::ELink2, 30, Big, Utf8},
+      {"u-king-s", "The Legend of Zelda: Breath of the Wild, Game Builder Garage (Switch)", F::ELink2, 30, Little,
+       Utf8},
+      {"blitz", "Splatoon 2, ARMS, Mario Kart 8 Deluxe (Switch)", F::ELink2, 30, Little, Sjis},
+      {"park", "Animal Crossing: New Horizons (Switch)", F::ELink2, 31, Little, Utf8},
+      {"thunder", "Splatoon 3 (Switch)", F::ELink2, 34, Little, Utf8},
+      {"ex-king", "The Legend of Zelda: Tears of the Kingdom (Switch), Splatoon Raiders (Switch 2)", F::ELink2, 36,
+       Little, Utf8},
+      // Sounds.
+      {"turbo", "Mario Kart 8 (Wii U)", F::SLink, 69, Big, Sjis},
+      {"alice", "The Legend of Zelda: Tri Force Heroes (3DS)", F::SLink, 69, Little, Sjis},
+      {"takumi", "Animal Crossing: Happy Home Designer (3DS)", F::SLink, 73, Little, Sjis},
+      {"gambit", "Splatoon (Wii U)", F::SLink2, 19, Big, Sjis},
+      {"turbo-s-proto", "Mario Kart 8 Deluxe prototype (Switch)", F::SLink2, 27, Little, Sjis},
+      {"u-king", "The Legend of Zelda: Breath of the Wild (Wii U)", F::SLink2, 28, Big, Utf8},
+      {"u-king-s", "The Legend of Zelda: Breath of the Wild, Game Builder Garage (Switch)", F::SLink2, 28, Little,
+       Utf8},
+      {"blitz", "Splatoon 2, ARMS, Mario Kart 8 Deluxe (Switch)", F::SLink2, 28, Little, Sjis},
+      {"park", "Animal Crossing: New Horizons (Switch)", F::SLink2, 29, Little, Utf8},
+      {"thunder", "Splatoon 3 (Switch)", F::SLink2, 31, Little, Utf8},
+      {"ex-king", "The Legend of Zelda: Tears of the Kingdom (Switch)", F::SLink2, 33, Little, Utf8},
+      {"spiral", "Splatoon Raiders (Switch 2)", F::SLink2, 34, Little, Utf8},
   };
   return p;
 }
 
-u32 preset_version(const Preset& preset, Format f, int system) {
-  for (const Preset::Entry& e : preset.entries)
-    if (e.format == f && (e.system < 0 || system < 0 || e.system == system))
-      return e.version;
-  return 0;
-}
-
-const Preset* preset_for(Format f, u32 version, int system) {
+const Preset* preset_for(Format f, u32 version) {
   for (const Preset& p : presets())
-    if (preset_version(p, f, system) == version)
+    if (p.format == f && p.version == version)
       return &p;
   return nullptr;
 }
 
-const Preset* find_preset(const std::string& key) {
+const Preset* find_preset(const std::string& key, Format f) {
   for (const Preset& p : presets())
-    if (p.key == key)
+    if (p.key == key && p.format == f)
       return &p;
   return nullptr;
 }
 
 std::string format_name(Format f) {
   switch (f) {
-    case Format::XLink:
-      return "XLink";
-    case Format::EffectLink:
-      return "EffectLink";
-    case Format::SoundLink:
-      return "SoundLink";
+    case Format::ELink:
+      return "ELink";
+    case Format::SLink:
+      return "SLink";
+    case Format::ELink2:
+      return "ELink2";
+    case Format::SLink2:
+      return "SLink2";
   }
   return {};
 }
@@ -113,7 +148,7 @@ namespace {
 
 // Grid containers and the action flag word exist only in the 64-bit layout.
 bool narrow_xlink(const Document& doc) {
-  return doc.format == Format::XLink && !xlink_modern::is_wide(doc.version(), doc.system());
+  return is_xlink(doc.format) && !xlink_modern::is_wide(doc.version(), xlink_system(doc.format));
 }
 
 }  // namespace
@@ -121,10 +156,10 @@ bool narrow_xlink(const Document& doc) {
 bool stores_field(const Document& doc, const Schema& s, int field) {
   using namespace xlink;
   // SoundLink 73 users have no distance settings.
-  if (doc.format == Format::SoundLink && doc.version() == 73 && &s == &dslink::sound_link(73).user)
+  if (doc.format == Format::SLink && doc.version() == 73 && &s == &dslink::sound_link(73).user)
     return field < dslink::user::Header1 || field > dslink::user::Header4;
-  if (doc.format == Format::XLink && &s == &schemas().user && field == user::GlobalPropertyCount)
-    return doc.version() != 19 && xlink_modern::has_global_count(doc.version(), doc.system());
+  if (is_xlink(doc.format) && &s == &schemas().user && field == user::GlobalPropertyCount)
+    return doc.version() != 19 && xlink_modern::has_global_count(doc.version(), xlink_system(doc.format));
   if (!narrow_xlink(doc))
     return true;
   if (&s == &schemas().ctn)
@@ -136,26 +171,23 @@ bool stores_field(const Document& doc, const Schema& s, int field) {
 }
 
 bool users_reorderable(const Document& doc) {
-  return doc.format != Format::XLink || doc.version() == 19;
+  return !is_xlink(doc.format) || doc.version() == 19;
 }
 
 bool stores_list(const Document& doc, const Schema& s, int list) {
-  if (doc.format == Format::XLink && &s == &xlink::schemas().user && list == xlink::user::LocalProperties)
-    return doc.version() != 19 && xlink_modern::has_user_locals(doc.version(), doc.system());
+  if (is_xlink(doc.format) && &s == &xlink::schemas().user && list == xlink::user::LocalProperties)
+    return doc.version() != 19 && xlink_modern::has_user_locals(doc.version(), xlink_system(doc.format));
   return !narrow_xlink(doc) || &s != &xlink::schemas().ctn;
 }
 
 bool stores_enum_value(const Document& doc, const Schema& s, int field, s64 value) {
-  if (doc.format != Format::XLink || &s != &xlink::schemas().ctn || field != xlink::ctn::Type)
+  if (!is_xlink(doc.format) || &s != &xlink::schemas().ctn || field != xlink::ctn::Type)
     return true;
   if (value == xlink::CT_Jump)
-    return doc.version() != 19 && xlink_modern::has_global_count(doc.version(), doc.system());
+    return doc.version() != 19 && xlink_modern::has_global_count(doc.version(), xlink_system(doc.format));
   return !narrow_xlink(doc) || value != xlink::CT_Grid;
 }
 
-int Document::system() const {
-  return format == Format::XLink && root ? static_cast<int>(root->i(xlink::file::System)) : -1;
-}
 
 Document Document::clone() const {
   Document d;
@@ -208,21 +240,22 @@ Document read_database(Bytes payload) {
   if (r.magic_at(0, "eflk") || r.magic_at(0, "SLNK"))
     return dslink_codec::read(payload);
   if (r.magic_at(0, "BLNK"))
-    throw Error("BLNK EffectLink databases are not supported");
+    throw Error("BLNK ELink databases are not supported");
   throw Error("not a link database (XLNK, eflk or SLNK)");
 }
 
 Buffer write_database(const Document& doc) {
   const u32 v = doc.version();
   switch (doc.format) {
-    case Format::XLink:
+    case Format::ELink2:
+    case Format::SLink2:
       if (v == 19)
         return xlink_v19::write(doc);
       if (v >= 27 && v <= 36)
         return xlink_modern::write(doc);
       throw Error("XLink resource version " + std::to_string(v) + " cannot be written");
-    case Format::EffectLink:
-    case Format::SoundLink:
+    case Format::ELink:
+    case Format::SLink:
       return dslink_codec::write(doc);
   }
   throw Error("unknown format");
@@ -277,8 +310,8 @@ std::string default_member_name(const std::string& path, const Document& doc) {
       base.resize(base.size() - std::string(ext).size());
   if (base.find('.') != std::string::npos)
     return base;
-  if (doc.format == Format::XLink)
-    return base + (doc.root->i(xlink::file::System) == static_cast<s64>(xlink::System::ELink) ? ".belnk" : ".bslnk");
+  if (is_xlink(doc.format))
+    return base + (is_effect(doc.format) ? ".belnk" : ".bslnk");
   return base + ".bin";
 }
 

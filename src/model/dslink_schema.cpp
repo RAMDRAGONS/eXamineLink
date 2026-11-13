@@ -138,7 +138,7 @@ void build_common(FamilySchemas& fs, const char* family_name, const char* asset_
       hidden_field("Kind", FieldType::U32),
       field("PooledAssets", FieldType::Bool, "Draw assets from the shared pool by index (3DS versions)"),
       field("PooledTriggers", FieldType::Bool, "Draw action triggers from the shared pool by index (3DS versions)"),
-      field("ParamsPerAsset", FieldType::U32, "EffectLink: parameter words each effect carries"),
+      field("ParamsPerAsset", FieldType::U32, "ELink: parameter words each effect carries"),
       // SoundLink 69 hands these to the 3D sound calculation; Mario Kart 8
       // skips a 0 and keeps its own default.
       sound ? field("MaxVolumeDistance", FieldType::F32,
@@ -220,7 +220,7 @@ void fill_effect_link(FamilySchemas& fs) {
                                 {K::Float, "PositionZ"}, {K::Float, "RotationX"}, {K::Float, "RotationY"},
                                 {K::Float, "RotationZ"}};
   build_record(fs.trigger, "EffectTrigger", trig, fs, -1);
-  build_common(fs, "EffectLink", "Effect");
+  build_common(fs, "ELink", "Effect");
 }
 
 void fill_sound_link(FamilySchemas& fs, u32 version) {
@@ -268,7 +268,7 @@ void fill_sound_link(FamilySchemas& fs, u32 version) {
   build_record(fs.trigger, "SoundTrigger", trig, fs, -1);
   const int label = fs.asset.slot_field[6];
   fs.asset.schema.label = [label](const Node& n) { return "#" + std::to_string(n.row()) + " " + n.s(label); };
-  build_common(fs, "SoundLink", "Asset");
+  build_common(fs, "SLink", "Asset");
 }
 
 }  // namespace

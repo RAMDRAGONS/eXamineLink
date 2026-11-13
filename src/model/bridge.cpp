@@ -35,19 +35,10 @@ int field_of(const Schema& s, std::string_view name) {
   return f;
 }
 
-bool old_format(Format f) {
-  return f == Format::EffectLink || f == Format::SoundLink;
-}
-
-// The XLink system that replaced an older format.
-int system_of(Format f) {
-  return static_cast<int>(f == Format::EffectLink ? X::System::ELink : X::System::SLink);
-}
-
 // The version of an older format without shared pools or aliases, so every
 // user keeps its records to itself.
 u32 plain_version(Format f) {
-  return f == Format::EffectLink ? 9 : 69;
+  return f == Format::ELink ? 9 : 69;
 }
 
 NodeList& users_of(Node& root) {
@@ -56,7 +47,7 @@ NodeList& users_of(Node& root) {
 
 // Users of `src` in `doc`'s encoding, an older format's in its plain version.
 Document normalized(const Document& src, const Document& doc, std::vector<std::string>& warnings) {
-  const u32 v = old_format(src.format) ? plain_version(src.format) : src.version();
+  const u32 v = is_xlink(src.format) ? src.version() : plain_version(src.format);
   std::vector<std::string> losses;
   Document out = convert(src, Target{src.format, v, doc.endian, doc.encoding}, losses);
   for (const auto& l : losses)
@@ -202,8 +193,8 @@ class ToXLink {
 public:
   ToXLink(const Document& doc, const Document& src, const BridgeOptions& opt, std::vector<std::string>& warnings)
       : m_doc(doc), m_src(src), m_opt(opt), m_warnings(warnings),
-        m_sound(src.format == Format::SoundLink), m_fs(m_sound ? D::sound_link(plain_version(src.format)) : D::effect_link()) {
-    m_x.format = Format::XLink;
+        m_sound(src.format == Format::SLink), m_fs(m_sound ? D::sound_link(plain_version(src.format)) : D::effect_link()) {
+    m_x.format = counterpart(src.format);
     m_x.endian = doc.endian;
     m_x.encoding = doc.encoding;
     m_x.root = std::make_unique<Node>(&X::schemas().file);
@@ -518,7 +509,7 @@ private:
       c->set_i(X::call::Guid, guids.next("call:" + c->s(X::call::KeyName)));
       c->set_i(X::call::AssetId, X::call_is_container(c->i(X::call::Flag)) ? -1 : asset_id++);
     }
-    if (xlink_modern::has_user_locals(m_doc.version(), m_doc.system()))
+    if (xlink_modern::has_user_locals(m_doc.version(), xlink_system(m_doc.format)))
       for (const auto& l : m_user_locals)
         x.list(X::user::LocalProperties).append_new().set_s(X::name::Name, l);
 
@@ -836,7 +827,7 @@ private:
 class FromXLink {
 public:
   FromXLink(const Document& doc, const Document& src, const BridgeOptions& opt, std::vector<std::string>& warnings)
-      : m_doc(doc), m_src(src), m_opt(opt), m_warnings(warnings), m_sound(doc.format == Format::SoundLink),
+      : m_doc(doc), m_src(src), m_opt(opt), m_warnings(warnings), m_sound(doc.format == Format::SLink),
         m_fs(m_sound ? D::sound_link(plain_version(doc.format)) : D::effect_link()) {
     m_o.format = doc.format;
     m_o.endian = doc.endian;
@@ -1212,7 +1203,7 @@ private:
   }
 
   void finish() {
-    const std::string target = m_sound ? "SoundLink" : "EffectLink";
+    const std::string target = m_sound ? "SLink" : "ELink";
     for (const auto& [type, n] : m_reduced)
       m_warnings.push_back(count_text(n, type + " containers " + target +
                                              " cannot state keep only their first child"));
@@ -1291,29 +1282,15 @@ std::map<std::string, std::set<std::string>> property_values(const Document& d) 
 std::string bridge_problem(const Document& doc, const Document& src) {
   if (!doc.root || !src.root)
     return "no database";
-  if (doc.format == src.format) {
-    if (doc.format == Format::XLink && doc.system() != src.system())
-      return "an " + X::SystemNames.at(static_cast<std::size_t>(src.system())) + " database's users cannot go into an " +
-             X::SystemNames.at(static_cast<std::size_t>(doc.system())) + " database";
+  if (doc.format == src.format)
     return {};
-  }
-  if (doc.format == Format::XLink && old_format(src.format)) {
-    if (doc.version() == 19)
-      return "users of " + format_name(src.format) + " go into XLink databases of version 27 and later";
-    if (doc.system() != system_of(src.format))
-      return format_name(src.format) + " users go into " +
-             X::SystemNames.at(static_cast<std::size_t>(system_of(src.format))) + " databases";
-    return {};
-  }
-  if (src.format == Format::XLink && old_format(doc.format)) {
-    if (src.version() == 19)
-      return "users of XLink version 19 do not go into " + format_name(doc.format);
-    if (src.system() != system_of(doc.format))
-      return "only " + X::SystemNames.at(static_cast<std::size_t>(system_of(doc.format))) + " users go into " +
-             format_name(doc.format);
-    return {};
-  }
-  return "effect and sound databases hold different things";
+  if (src.format != counterpart(doc.format))
+    return "effect and sound databases hold different things";
+  if (is_xlink(doc.format) && doc.version() == 19)
+    return format_name(src.format) + " users go into " + format_name(doc.format) + " databases of version 27 and later";
+  if (is_xlink(src.format) && src.version() == 19)
+    return format_name(src.format) + " v19 users do not go into " + format_name(doc.format);
+  return {};
 }
 
 bool bridge_crosses_formats(const Document& doc, const Document& src) {
@@ -1323,9 +1300,9 @@ bool bridge_crosses_formats(const Document& doc, const Document& src) {
 BridgeOptions default_bridge_options(const Document& doc, const Document& src) {
   BridgeOptions o;
   o.action_slot = "State";
-  const Document& xl = doc.format == Format::XLink ? doc : src;
-  const Document* ef = doc.format == Format::EffectLink ? &doc : src.format == Format::EffectLink ? &src : nullptr;
-  if (xl.format == Format::XLink && xl.root) {
+  const Document& xl = is_xlink(doc.format) ? doc : src;
+  const Document* ef = doc.format == Format::ELink ? &doc : src.format == Format::ELink ? &src : nullptr;
+  if (is_xlink(xl.format) && xl.root) {
     std::map<std::string, int> slots;
     for (const auto& u : xl.root->list(X::file::Users))
       for (const auto& s : u->list(X::user::ActionSlots))
@@ -1333,7 +1310,7 @@ BridgeOptions default_bridge_options(const Document& doc, const Document& src) {
     if (!slots.empty())
       o.action_slot = std::max_element(slots.begin(), slots.end(), [](auto& a, auto& b) { return a.second < b.second; })->first;
   }
-  if (!ef || xl.format != Format::XLink)
+  if (!ef || !is_xlink(xl.format))
     return o;
   // Each condition slot stands for the property sharing most of its values.
   const auto by_slot = slot_values(*ef);
@@ -1354,7 +1331,7 @@ BridgeOptions default_bridge_options(const Document& doc, const Document& src) {
     }
     if (best)
       taken.insert(o.conditions[static_cast<std::size_t>(k)]);
-    else if (doc.format == Format::XLink && !by_slot[static_cast<std::size_t>(k)].empty())
+    else if (is_xlink(doc.format) && !by_slot[static_cast<std::size_t>(k)].empty())
       o.conditions[static_cast<std::size_t>(k)] = "Condition" + std::to_string(k + 1);
   }
   return o;
@@ -1369,10 +1346,10 @@ std::vector<xml::UserImport> bridge_users(const Document& doc, const Document& s
   std::vector<int> picked = which;
   if (doc.format == s.format) {
     built = s.clone();
-  } else if (doc.format == Format::XLink) {
+  } else if (is_xlink(doc.format)) {
     if (options.action_slot.empty())
       throw Error("the action slot older users' actions go in needs a name");
-    for (int k = 0; k < 3 && s.format == Format::EffectLink; ++k)
+    for (int k = 0; k < 3 && s.format == Format::ELink; ++k)
       if (options.conditions[static_cast<std::size_t>(k)].empty())
         throw Error("Condition" + std::to_string(k + 1) + " needs an XLink property to stand for");
     built = ToXLink(doc, s, options, warnings).run(which);

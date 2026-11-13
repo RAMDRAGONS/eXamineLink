@@ -76,8 +76,8 @@ ImportUsersDialog::ImportUsersDialog(const Document& doc, const Document& src, c
     const BridgeOptions def = default_bridge_options(doc, src);
     auto* box = new QGroupBox(tr("Between %1 and %2").arg(qs(format_name(src.format)), qs(format_name(doc.format))));
     auto* form = new QFormLayout(box);
-    const Document& xl_side = doc.format == Format::XLink ? doc : src;
-    if (doc.format == Format::XLink) {
+    const Document& xl_side = is_xlink(doc.format) ? doc : src;
+    if (is_xlink(doc.format)) {
       QStringList slot_names;
       for (const auto& u : xl_side.root->list(xlink::file::Users))
         for (const auto& s : u->list(xlink::user::ActionSlots)) {
@@ -90,7 +90,7 @@ ImportUsersDialog::ImportUsersDialog(const Document& doc, const Document& src, c
       m_slot->setToolTip(tr("XLink action slot that holds the actions of each imported user"));
       form->addRow(tr("Action slot"), m_slot);
     }
-    if (doc.format == Format::EffectLink || src.format == Format::EffectLink) {
+    if (doc.format == Format::ELink || src.format == Format::ELink) {
       QStringList props;
       for (const auto& n : xl_side.root->list(xlink::file::LocalPropertyNames))
         props << qs(to_utf8(n->s(xlink::name::Name), xl_side.encoding));
@@ -99,7 +99,7 @@ ImportUsersDialog::ImportUsersDialog(const Document& doc, const Document& src, c
             editable_combo(props, qs(to_utf8(def.conditions[static_cast<std::size_t>(k)], doc.encoding)));
         m_conditions[static_cast<std::size_t>(k)]->setObjectName(QString("condition%1").arg(k + 1));
         m_conditions[static_cast<std::size_t>(k)]->setToolTip(
-            tr("XLink property the game compares EffectLink's Condition%1 with").arg(k + 1));
+            tr("XLink property the game compares ELink's Condition%1 with").arg(k + 1));
         form->addRow(tr("Condition%1 property").arg(k + 1), m_conditions[static_cast<std::size_t>(k)]);
       }
     }

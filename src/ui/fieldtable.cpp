@@ -99,7 +99,7 @@ void FieldTable::refresh() {
 
 QString FieldTable::infoFor(const Node& n, int f) const {
   const FieldDef& fd = n.schema().fields[f];
-  if (m_doc->format == Format::XLink && &n.schema() == &xlink::schemas().user && f == xlink::user::Hash &&
+  if (is_xlink(m_doc->format) && &n.schema() == &xlink::schemas().user && f == xlink::user::Hash &&
       !n.s(xlink::user::Name).empty())
     return crc32(n.s(xlink::user::Name)) == static_cast<u32>(n.i(f)) ? tr("matches the name")
                                                                       : tr("does not match the name");
@@ -148,7 +148,7 @@ void FieldTable::addField(QTreeWidgetItem* parent, Node& n, int f, int depth) {
   if (fd.type == FieldType::RangeStart)
     return;
   // Definitions are shown by name already; their fields are clutter here.
-  if (m_doc->format == Format::XLink && &n.schema() == &xlink::schemas().param && f == xlink::param::Def)
+  if (is_xlink(m_doc->format) && &n.schema() == &xlink::schemas().param && f == xlink::param::Def)
     return;
   const int users = count_references(*m_doc->root, *list, static_cast<int>(v));
   if (users > 1)
@@ -225,7 +225,7 @@ void FieldTable::commit(QTreeWidgetItem* it, const QString& text) {
   Value v;
   // Parameters choose their definition by name.
   std::string input = ss(text);
-  if (m_doc->format == Format::XLink && &n->schema() == &xlink::schemas().param && f == xlink::param::Def) {
+  if (is_xlink(m_doc->format) && &n->schema() == &xlink::schemas().param && f == xlink::param::Def) {
     if (const NodeList* defs = xlink::param_defs_for(*n))
       for (int k = 0; k < defs->size(); ++k)
         if (to_utf8(defs->at(k).s(xlink::pdef::Name), m_doc->encoding) == input)

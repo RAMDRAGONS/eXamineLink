@@ -114,7 +114,7 @@ void LinkReader::read_eflk9(Node& file) {
     u.set_i(user::ParamsPerAsset, n_p);
     u.set_i(user::OwnStrings, 1);
     if (strings > next || strings < at)
-      throw Error("EffectLink user " + u.s(user::Name) + " places its strings outside its block");
+      throw Error("ELink user " + u.s(user::Name) + " places its strings outside its block");
     u.set_s(user::StringPool, region(strings, next));
     u64 p = at + 28;
     read_records(fs.asset, u.list(user::Assets), p, n_e, strings);
@@ -130,7 +130,7 @@ void LinkReader::read_eflk9(Node& file) {
     read_records(fs.action, u.list(user::Actions), p, n_a, strings);
     p += u64{n_a} * fs.action.size();
     if (p != strings)
-      throw Error("EffectLink user " + u.s(user::Name) + " tables do not end at its strings");
+      throw Error("ELink user " + u.s(user::Name) + " tables do not end at its strings");
   }
 }
 
@@ -147,7 +147,7 @@ void LinkReader::read_slnk69(Node& file) {
     Node& u = file.list(file::Users).append(std::make_unique<Node>(&fs.user));
     const u32 kind = r.u32_at(at);
     if (kind == AliasKind || kind == EmptyKind)
-      throw Error("SoundLink 69 user at " + hex(at) + " has kind " + std::to_string(kind) + ", which is not understood");
+      throw Error("SLink 69 user at " + hex(at) + " has kind " + std::to_string(kind) + ", which is not understood");
     u.set_i(user::Kind, kind);
     u.set_i(user::Type, UT_User);
     u.set_s(user::Name, read_pool_string(r, strings, r.u32_at(at + 8), "user name"));
@@ -172,7 +172,7 @@ void LinkReader::read_slnk69(Node& file) {
     read_records(fs.trigger, u.list(user::Triggers), p, n_t, rec_strings);
     p += u64{n_t} * fs.trigger.size();
     if (p != trailer || r.u32_at(at + 4) != (trailer - at) + 4)
-      throw Error("SoundLink user " + u.s(user::Name) + " block sizes disagree with its tables");
+      throw Error("SLink user " + u.s(user::Name) + " block sizes disagree with its tables");
     const u64 next = i + 1 < n_user ? r.u32_at(0x10 + 4 * u64{i + 1}) : r.size();
     if (!u.i(user::OwnStrings) && trailer + 4 < next)
       u.set_s(user::Tail, region(trailer + 4, next));
@@ -237,7 +237,7 @@ void LinkReader::read_pooled(Node& file) {
     p += pooled_triggers ? 4 : u64{n_t} * fs.trigger.size();
     const u64 trailer = p;
     if (!m_effect && r.u32_at(at + 12) != trailer - at)
-      throw Error("SoundLink user " + u.s(user::Name) + " places its trailer away from its tables");
+      throw Error("SLink user " + u.s(user::Name) + " places its trailer away from its tables");
     u64 next = r.size();
     for (u32 j = 0; j < n_user; ++j)
       if (const u64 o = r.u32_at(offsets + 4 * u64{j}); o > at)
@@ -274,7 +274,7 @@ void LinkReader::read_pooled(Node& file) {
 
 Document LinkReader::run() {
   Document doc;
-  doc.format = m_effect ? Format::EffectLink : Format::SoundLink;
+  doc.format = m_effect ? Format::ELink : Format::SLink;
   doc.endian = r.endian();
   if (m_effect ? (m_version != 9 && m_version != 10) : (m_version != 69 && m_version != 73))
     throw Error(format_name(doc.format) + " version " + std::to_string(m_version) + " is not supported");
@@ -351,7 +351,7 @@ void LinkWriter::write_params(const Node& u, const NodeList& slots, u64 per_slot
   for (const auto& slot : slots) {
     const NodeList& params = slot->list(slot_params::Params);
     if (static_cast<u64>(params.size()) != per_slot)
-      throw Error("EffectLink user " + u.s(user::Name) + " gives each effect " + std::to_string(per_slot) +
+      throw Error("ELink user " + u.s(user::Name) + " gives each effect " + std::to_string(per_slot) +
                   " parameter words, but effect " + std::to_string(slot->row()) + " has " +
                   std::to_string(params.size()));
     for (const auto& p : params)
@@ -378,7 +378,7 @@ Buffer LinkWriter::write_eflk9() {
   for (int i = 0; i < users.size(); ++i) {
     const Node& u = users.at(i);
     if (u.i(user::Type) != UT_User || u.i(user::PooledAssets) || u.i(user::PooledTriggers))
-      throw Error("EffectLink 9 has no aliases or shared pools; user " + u.s(user::Name) + " needs converting first");
+      throw Error("ELink 9 has no aliases or shared pools; user " + u.s(user::Name) + " needs converting first");
     const u64 n_e = u.list(user::Assets).size(), n_p = static_cast<u64>(u.i(user::ParamsPerAsset));
     const std::size_t at = w.pos();
     w.patch_u32(entries + 8 * i, static_cast<u32>(at));
@@ -434,7 +434,7 @@ Buffer LinkWriter::write_slnk69() {
   for (int i = 0; i < users.size(); ++i) {
     const Node& u = users.at(i);
     if (u.i(user::Type) != UT_User)
-      throw Error("SoundLink 69 has no aliases; user " + u.s(user::Name) + " needs converting first");
+      throw Error("SLink 69 has no aliases; user " + u.s(user::Name) + " needs converting first");
     const std::size_t at = w.pos();
     w.patch_u32(offsets + 4 * i, static_cast<u32>(at));
     const bool own = uses_own_strings(u);

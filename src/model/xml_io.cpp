@@ -6,6 +6,7 @@
 #include <QXmlStreamWriter>
 
 #include <algorithm>
+#include <cctype>
 #include <functional>
 #include <set>
 #include <unordered_map>
@@ -144,18 +145,19 @@ std::string encoding_name(Encoding e) {
 
 const Schema* root_schema_for(Format f, u32 version) {
   switch (f) {
-    case Format::XLink:
+    case Format::ELink2:
+    case Format::SLink2:
       return &xlink::schemas().file;
-    case Format::EffectLink:
+    case Format::ELink:
       return &dslink::effect_link().file;
-    case Format::SoundLink:
+    case Format::SLink:
       return &dslink::sound_link(version).file;
   }
   return nullptr;
 }
 
 bool parse_format(const std::string& name, Format& f) {
-  for (const Format c : {Format::XLink, Format::EffectLink, Format::SoundLink})
+  for (const Format c : {Format::ELink, Format::SLink, Format::ELink2, Format::SLink2})
     if (format_name(c) == name) {
       f = c;
       return true;
@@ -245,7 +247,7 @@ public:
   QXmlStreamReader& x;
   Encoding m_enc;
   // Attributes describing the file rather than a field.
-  std::set<std::string> m_meta{ToolAttr, "Format", "Encoding", "ByteOrder", "System", SharedIdAttr};
+  std::set<std::string> m_meta{ToolAttr, "Format", "Encoding", "ByteOrder", SharedIdAttr};
   std::string m_file;
   std::map<const Node*, std::vector<std::pair<int, std::string>>> deferred;
   std::vector<std::string> warnings;
@@ -294,10 +296,11 @@ void finalize(std::map<const Node*, std::vector<std::pair<int, std::string>>>& d
   }
 }
 
-std::string user_suffix(Format f, const Node& root) {
-  if (f == Format::XLink)
-    return root.i(xlink::file::System) == static_cast<s64>(xlink::System::ELink) ? ".elink2.xml" : ".slink2.xml";
-  return f == Format::EffectLink ? ".elink.xml" : ".slink.xml";
+std::string user_suffix(Format f) {
+  std::string name = format_name(f);
+  for (char& c : name)
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return "." + name + ".xml";
 }
 
 // Visits every Ref-like field below `n` whose target is a list of `root`.
@@ -362,7 +365,7 @@ Document load_database(const std::string& path, std::vector<std::string>& warnin
   const u32 version = x.attributes().value("Version").toUInt();
   Document doc;
   doc.format = fmt;
-  const Preset* p = preset_for(fmt, version, -1);
+  const Preset* p = preset_for(fmt, version);
   doc.endian = p ? p->endian : Endian::Little;
   doc.encoding = p ? p->encoding : (version >= 31 ? Encoding::Utf8 : Encoding::ShiftJis);
   const auto enc = x.attributes().value("Encoding");
@@ -394,7 +397,7 @@ std::string user_file_name(const Document& doc, const Node& user) {
   for (char& c : base)
     if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|')
       c = '_';
-  return base + user_suffix(doc.format, *doc.root);
+  return base + user_suffix(doc.format);
 }
 
 namespace {
@@ -437,8 +440,6 @@ void export_user(const Document& doc, const Node& user, const std::string& path)
   x.writeAttribute(ToolAttr, ToolVersion);
   x.writeAttribute("Format", q(format_name(doc.format)));
   x.writeAttribute("Version", QString::number(doc.version()));
-  if (doc.format == Format::XLink)
-    x.writeAttribute("System", q(xlink::SystemNames.at(static_cast<std::size_t>(root.i(xlink::file::System)))));
   write_node(x, user, doc.encoding);
   if (!needed.empty()) {
     x.writeStartElement("Shared");
@@ -465,12 +466,11 @@ UserImport read_user(const Document& doc, const std::string& path) {
   const Node& root = *doc.root;
   if (s(x.name()) != root.schema().name + "User")
     throw Error(path + " holds a " + s(x.name()) + ", not a " + root.schema().name + " user");
-  if (doc.format == Format::XLink) {
-    const std::string sys = s(x.attributes().value("System"));
-    const std::string mine = xlink::SystemNames.at(static_cast<std::size_t>(root.i(xlink::file::System)));
-    if (!sys.empty() && sys != mine)
-      throw Error(path + " is an " + sys + " user; this database is " + mine);
-  }
+  Format user_format;
+  if (!parse_format(s(x.attributes().value("Format")), user_format))
+    throw Error(path + " names no link database format");
+  if (user_format != doc.format)
+    throw Error(path + " is an " + format_name(user_format) + " user; this database is " + format_name(doc.format));
   bool has_version = false;
   const u32 version = x.attributes().value("Version").toUInt(&has_version);
   const bool foreign = has_version && version != doc.version();
@@ -484,8 +484,7 @@ UserImport read_user(const Document& doc, const std::string& path) {
   if (foreign) {
     src.root = std::make_unique<Node>(root_schema_for(doc.format, version));
     src.root->set_i(0, version);
-    if (doc.format == Format::XLink) {
-      src.root->set_i(xlink::file::System, root.i(xlink::file::System));
+    if (is_xlink(doc.format)) {
       // Parameters name their definitions; the target's are the ones that count.
       for (const int l : {xlink::file::UserParamDefs, xlink::file::AssetParamDefs, xlink::file::TriggerParamDefs})
         for (const auto& d : root.list(l))
@@ -584,7 +583,7 @@ int find_matching_user(const Document& doc, const UserImport& imp) {
     const Node& u = users.at(k);
     if (!name.empty() && u.s(0) == name)
       return k;
-    if (doc.format == Format::XLink && imp.user->i(xlink::user::Hash) != 0 &&
+    if (is_xlink(doc.format) && imp.user->i(xlink::user::Hash) != 0 &&
         u.i(xlink::user::Hash) == imp.user->i(xlink::user::Hash))
       return k;
   }
@@ -620,7 +619,7 @@ std::unique_ptr<Node> shadow_root(const Document& doc) {
   const Node& root = *doc.root;
   for (int f = 0; f < static_cast<int>(root.schema().fields.size()); ++f)
     shadow->value(f) = root.value(f);
-  if (doc.format == Format::XLink)
+  if (is_xlink(doc.format))
     for (const int l : {xlink::file::UserParamDefs, xlink::file::AssetParamDefs, xlink::file::TriggerParamDefs})
       for (const auto& d : root.list(l))
         shadow->list(l).append(d->clone());
@@ -687,7 +686,7 @@ void local_name_refs(Node& user, const std::function<Node*(int list, s64 id)>& s
 void bind_local_names(Document& doc, EditStack& edits, Node& user,
                       const std::map<std::pair<int, s64>, Node*>& by_id) {
   using namespace xlink;
-  if (doc.format != Format::XLink || doc.version() == 19)
+  if (!is_xlink(doc.format) || doc.version() == 19)
     return;
   std::vector<LocalNameRef> refs;
   local_name_refs(user, [&](int list, s64 id) {

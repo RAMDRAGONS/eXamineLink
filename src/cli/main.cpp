@@ -51,17 +51,17 @@ int usage() {
       "  export-user FILE USER OUT.xml export one user by name or hash\n"
       "  import-user FILE IN.xml OUT   add or replace a user from its XML file\n"
       "  bridge-check TARGET SOURCE    import every user of SOURCE into TARGET and check the\n"
-      "                                result reads back; an EffectLink or SoundLink source's\n"
+      "                                result reads back; an ELink or SLink source's\n"
       "                                users must then come back playing the same\n"
       "  import-users FILE SOURCE OUT [USER...] [--replace] [--slot NAME]\n"
       "               [--conditions P1,P2,P3]\n"
       "                                copy users (all when none is named) from another\n"
       "                                database of the same link system: any XLink version,\n"
-      "                                or EffectLink to and from ELink2 and SoundLink to and\n"
+      "                                or ELink to and from ELink2 and SLink to and\n"
       "                                from SLink2. --replace overwrites users of the same\n"
       "                                name; --slot names the action slot older users' actions\n"
       "                                go in; --conditions names the XLink properties for the\n"
-      "                                three EffectLink conditions. Both default to what the\n"
+      "                                three ELink conditions. Both default to what the\n"
       "                                databases suggest.\n",
       stderr);
   return 2;
@@ -76,7 +76,8 @@ std::string summary(const Document& d) {
   // A database alone cannot tell apart games that share its settings.
   std::string as;
   for (const Preset& p : presets())
-    if (preset_version(p, d.format, d.system()) == d.version() && p.endian == d.endian && p.encoding == d.encoding)
+    if (p.format == d.format && p.version == d.version() && p.endian == d.endian &&
+        p.encoding == d.encoding)
       as += (as.empty() ? "" : " or ") + p.name;
   if (!as.empty())
     s += " (as " + as + ")";
@@ -128,7 +129,7 @@ std::string first_difference(const Node& a, const Node& b, Encoding enc) {
 class CanonCompare {
 public:
   CanonCompare(const Document& a, const Document& b) : A(a), B(b) {
-    xlink_ = a.format == Format::XLink;
+    xlink_ = is_xlink(a.format);
     v19_ = xlink_ && a.version() == 19;
   }
 
@@ -288,7 +289,7 @@ int fuzz(Document& doc, EditStack& edits, std::mt19937& rng, int count, bool kee
                          lname == "Axis2" || lname == "Cells";
     // Games binary-search local property names, so these lists stay sorted
     // and free of repeats.
-    const bool sorted = doc.format == Format::XLink && (lname == "LocalProperties" || lname == "LocalPropertyNames");
+    const bool sorted = is_xlink(doc.format) && (lname == "LocalProperties" || lname == "LocalPropertyNames");
     const int op = pick(3);
     if (keep_valid && sorted && op != 1)
       continue;
@@ -298,7 +299,7 @@ int fuzz(Document& doc, EditStack& edits, std::mt19937& rng, int count, bool kee
       const int src = pick(size);
       auto copy = list.at(src).clone();
       // XLink users are keyed by name (or its hash) and must stay distinct.
-      if (doc.format == Format::XLink && el == &xlink::schemas().user)
+      if (is_xlink(doc.format) && el == &xlink::schemas().user)
         copy->set_s(xlink::user::Name, "FuzzUser" + std::to_string(serial++));
       edits.insert(list, keep_valid ? src + 1 : pick(size + 1), std::move(copy));
     } else if (op == 1 && size > 0) {
@@ -470,7 +471,7 @@ int check(const std::vector<std::string>& files) {
       // Parameter masks hold 64 asset and 32 trigger definitions; a database
       // already at that limit has no room for another.
       const auto full = [&](const NodeList* list) {
-        if (copy.format != Format::XLink)
+        if (!is_xlink(copy.format))
           return false;
         if (list == &copy.root->list(xlink::file::AssetParamDefs))
           return list->size() >= 64;
@@ -666,7 +667,7 @@ const Node* find_user(const Document& d, const std::string& key) {
   }
   // XLink users may also be named by their hash, written any way strtoul
   // reads, or by a name the database stores only as its hash.
-  if (d.format == Format::XLink && !key.empty()) {
+  if (is_xlink(d.format) && !key.empty()) {
     const u32 named = crc32(from_utf8(key, d.encoding));
     for (const auto& u : users)
       if (static_cast<u32>(u->i(xlink::user::Hash)) == named)
@@ -696,7 +697,7 @@ std::vector<Value> values_of(const Node& n, const std::vector<std::string>& fiel
 // every combination of condition values, and each action's triggers.
 std::vector<std::string> playback_differences(const Document& a, const Document& b) {
   using namespace dslink;
-  const bool sound = a.format == Format::SoundLink;
+  const bool sound = a.format == Format::SLink;
   const FamilySchemas& fa = *family_of(*a.root);
   const FamilySchemas& fb = *family_of(*b.root);
   const std::vector<std::string> kept_asset =
@@ -896,17 +897,17 @@ int main(int argc, char** argv) {
     if (cmd == "convert" && args.size() >= 3 && args.size() <= 5) {
       const Document d = load_any(args[0]);
       Target t{d.format, d.version(), d.endian, d.encoding};
-      if (const Preset* p = find_preset(args[2])) {
-        const u32 v = preset_version(*p, d.format, d.system());
-        if (!v)
-          throw Error(p->name + " has no " + format_name(d.format) + " database of this kind");
-        t = {d.format, v, p->endian, p->encoding};
+      if (const Preset* p = find_preset(args[2], d.format)) {
+        t = {d.format, p->version, p->endian, p->encoding};
+      } else if (std::any_of(presets().begin(), presets().end(), [&](const Preset& p) { return p.key == args[2]; })) {
+        throw Error("there is no " + format_name(d.format) + " preset named " + args[2] +
+                    "; see examinelink-cli presets");
       } else {
         char* end = nullptr;
         const u32 version = static_cast<u32>(std::strtoul(args[2].c_str(), &end, 10));
         if (!end || *end || args[2].empty())
           throw Error("no version or preset named " + args[2] + "; see examinelink-cli presets");
-        const Version* found = find_version(d.format, version, d.system());
+        const Version* found = find_version(d.format, version);
         if (!found && version != d.version())
           throw Error("no such version for " + format_name(d.format));
         if (found)
@@ -928,14 +929,16 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (cmd == "presets" && args.empty()) {
-      for (const Preset& p : presets()) {
-        std::string versions;
-        for (const Preset::Entry& e : p.entries) {
-          const Version* v = find_version(e.format, e.version, e.system);
-          versions += (versions.empty() ? "" : ", ") + (v ? v->label : format_name(e.format) + " v" + std::to_string(e.version));
+      for (const bool sounds : {false, true}) {
+        std::printf("%s%s presets:\n", sounds ? "\n" : "", sounds ? "Sound" : "Effect");
+        for (const Preset& p : presets()) {
+          if (is_effect(p.format) == sounds)
+            continue;
+          const Version* v = find_version(p.format, p.version);
+          std::printf("  %-14s %s: %s, %s-endian, %s\n", p.key.c_str(), p.name.c_str(),
+                      v ? v->label.c_str() : (format_name(p.format) + " v" + std::to_string(p.version)).c_str(),
+                      p.endian == Endian::Big ? "big" : "little", p.encoding == Encoding::Utf8 ? "UTF-8" : "Shift-JIS");
         }
-        std::printf("%-14s %s: %s, %s-endian, %s\n", p.key.c_str(), p.name.c_str(), versions.c_str(),
-                    p.endian == Endian::Big ? "big" : "little", p.encoding == Encoding::Utf8 ? "UTF-8" : "Shift-JIS");
       }
       return 0;
     }
@@ -995,7 +998,7 @@ int main(int argc, char** argv) {
       };
       bool ok = true;
       const Document there = trip(target, source, ok);
-      if (source.format != Format::XLink) {
+      if (!is_xlink(source.format)) {
         const Document back = trip(source, there, ok);
         const auto diffs = playback_differences(source, back);
         for (std::size_t k = 0; k < diffs.size() && k < 20; ++k)
@@ -1036,9 +1039,9 @@ int main(int argc, char** argv) {
         }
       }
       if (bridge_crosses_formats(d, src)) {
-        if (d.format == Format::XLink)
+        if (is_xlink(d.format))
           std::fprintf(stderr, "action slot: %s\n", to_utf8(opt.action_slot, d.encoding).c_str());
-        if (src.format == Format::EffectLink || d.format == Format::EffectLink)
+        if (src.format == Format::ELink || d.format == Format::ELink)
           for (int c = 0; c < 3; ++c)
             std::fprintf(stderr, "Condition%d: %s\n", c + 1,
                          to_utf8(opt.conditions[static_cast<std::size_t>(c)], d.encoding).c_str());

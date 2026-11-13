@@ -10,21 +10,29 @@
 
 namespace xl {
 
-enum class Format { XLink, EffectLink, SoundLink };
+// The four link systems. ELink and SLink are the separate effect and sound
+// formats XLink replaced; ELink2 and SLink2 are XLink's effect and sound
+// databases, which share one layout and codec but carry their own versions.
+enum class Format { ELink, SLink, ELink2, SLink2 };
+
+bool is_xlink(Format f);
+bool is_effect(Format f);
+// The system index XLink files and layouts use: 0 effects, 1 sounds.
+int xlink_system(Format f);
+Format xlink_format(int system);
+// The format that replaced (or was replaced by) `f`: ELink and ELink2,
+// SLink and SLink2.
+Format counterpart(Format f);
 
 // A version eXamineLink can write.
 struct Version {
   Format format;
   u32 version;
   std::string label;
-  // XLink games check each system's version separately (Splatoon 2's effect
-  // system wants 30, its sound system 28): 0 effects, 1 sounds, -1 either.
-  int system = -1;
 };
 
 const std::vector<Version>& versions();
-// `system` as in Version; -1 matches either.
-const Version* find_version(Format f, u32 version, int system);
+const Version* find_version(Format f, u32 version);
 
 // What to write: a version in a byte order and text encoding. These follow
 // the platform and game, not the version (Breath of the Wild ships ELink2
@@ -37,33 +45,29 @@ struct Target {
   Encoding encoding;
 };
 
-// A game's settings: the versions its link systems read, with its byte
-// order and encoding. Only settings seen in that game's own databases.
+// The settings of one link system as games ship it: a format and version
+// with a byte order and encoding. Effect and sound systems carry their own
+// versions, so each has its own presets, and games whose systems agree share
+// one. Keys are the games' codenames, unique among effect and among sound
+// presets.
 struct Preset {
   std::string key;
   std::string name;
+  Format format;
+  u32 version;
   Endian endian;
   Encoding encoding;
-  struct Entry {
-    Format format;
-    u32 version;
-    int system;
-  };
-  std::vector<Entry> entries;
 };
 
 const std::vector<Preset>& presets();
-// The version `preset` uses for databases of this format and XLink system
-// (-1 for formats without one), or 0 when it has none.
-u32 preset_version(const Preset& preset, Format f, int system);
-// The first preset using `version` for this format and system, or null.
-const Preset* preset_for(Format f, u32 version, int system);
-const Preset* find_preset(const std::string& key);
+// The first preset of this format using `version`, or null.
+const Preset* preset_for(Format f, u32 version);
+const Preset* find_preset(const std::string& key, Format f);
 
 std::string format_name(Format f);
 
 struct Document {
-  Format format = Format::XLink;
+  Format format = Format::ELink2;
   Endian endian = Endian::Little;
   Encoding encoding = Encoding::Utf8;
   std::unique_ptr<Node> root;
@@ -71,8 +75,6 @@ struct Document {
   std::vector<Layer> layers;
 
   u32 version() const;
-  // The XLink system (0 effects, 1 sounds), or -1 for other formats.
-  int system() const;
   Document clone() const;
 };
 

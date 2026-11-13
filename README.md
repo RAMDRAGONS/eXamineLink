@@ -5,12 +5,12 @@ effects and sounds:
 
 | Format | Versions | Games checked |
 | --- | --- | --- |
-| XLink (`XLNK`, `.belnk`, `.bslnk`) | 19 | Splatoon (Wii U) |
+| XLink (`XLNK`, `.belnk`, `.bslnk`) | 19 | Splatoon (ELink2 v19, SLink2 v19) |
 | | 27 to 31, 32-bit | Mario Kart 8 Deluxe prototype (ELink2 v29, SLink2 v27); Splatoon 2, ARMS, Mario Kart 8 Deluxe, Game Builder Garage, The Legend of Zelda: Breath of the Wild on Wii U and Switch (ELink2 v30, SLink2 v28); Animal Crossing: New Horizons (ELink2 v31, SLink2 v29) |
 | | 31 to 36, 64-bit | Splatoon 3 (ELink2 v34, SLink2 v31); The Legend of Zelda: Tears of the Kingdom (ELink2 v36, SLink2 v33); Splatoon Raiders (ELink2 v36, SLink2 v34) |
-| EffectLink (`eflk`) | 9 | Mario Kart 8 (Wii U) |
+| ELink (`eflk`) | 9 | Mario Kart 8 (Wii U) |
 | | 10 (shared pools) | Animal Crossing: Happy Home Designer (3DS) |
-| SoundLink (`SLNK`) | 69 | Mario Kart 8 (Wii U), The Legend of Zelda: Tri Force Heroes (3DS) |
+| SLink (`SLNK`) | 69 | Mario Kart 8 (Wii U), The Legend of Zelda: Tri Force Heroes (3DS) |
 | | 73 (shared pools) | Animal Crossing: Happy Home Designer (3DS) |
 
 Databases open straight from their containers: Yaz-compressed SARC
@@ -93,34 +93,55 @@ list, for instance) and names every user whose hash matches.
 
 ### Saving into other versions
 
-**File > Save As** offers every version of the same format and system
-(an ELink database converts only to other ELink versions), with a byte order
-and text encoding. A **Preset** picks all three as a game ships them;
-games that share settings share a preset, and presets exist only for games
-whose databases were checked:
+**File > Save As** offers every version of the same format (an ELink2
+database converts only to other ELink2 versions), with a byte order
+and text encoding. A **Preset** picks all three as a game ships them. The
+effect and sound systems carry their own versions, so each has its own
+presets; games whose system agrees share one, and presets exist only for
+games whose databases were checked. Keys are the games' codenames.
 
-| Preset | Games | Versions | Byte order | Encoding |
+Effect presets:
+
+| Preset | Games | Version | Byte order | Encoding |
 |---|---|---|---|---|
-| `turbo` | Mario Kart 8 (Wii U) | EffectLink 9, SoundLink 69 | big | Shift-JIS |
-| `alice` | The Legend of Zelda: Tri Force Heroes (3DS) | SoundLink 69 | little | Shift-JIS |
-| `takumi` | Animal Crossing: Happy Home Designer (3DS) | EffectLink 10, SoundLink 73 | little | Shift-JIS |
-| `gambit` | Splatoon (Wii U) | XLink 19 | big | Shift-JIS |
-| `turbo-s-proto` | Mario Kart 8 Deluxe prototype (Switch) | ELink2 29, SLink2 27 | little | Shift-JIS |
-| `u-king` | The Legend of Zelda: Breath of the Wild (Wii U) | ELink2 30, SLink2 28 | big | UTF-8 |
-| `u-king-s` | The Legend of Zelda: Breath of the Wild, Game Builder Garage (Switch) | ELink2 30, SLink2 28 | little | UTF-8 |
-| `blitz` | Splatoon 2, ARMS, Mario Kart 8 Deluxe (Switch) | ELink2 30, SLink2 28 | little | Shift-JIS |
-| `park` | Animal Crossing: New Horizons (Switch) | ELink2 31, SLink2 29 | little | UTF-8 |
-| `thunder` | Splatoon 3 (Switch) | ELink2 34, SLink2 31 | little | UTF-8 |
-| `ex-king` | The Legend of Zelda: Tears of the Kingdom (Switch) | ELink2 36, SLink2 33 | little | UTF-8 |
-| `spiral` | Splatoon Raiders (Switch 2) | ELink2 36, SLink2 34 | little | UTF-8 |
+| `turbo` | Mario Kart 8 (Wii U) | ELink 9 | big | Shift-JIS |
+| `takumi` | Animal Crossing: Happy Home Designer (3DS) | ELink 10 | little | Shift-JIS |
+| `gambit` | Splatoon (Wii U) | ELink2 19 | big | Shift-JIS |
+| `turbo-s-proto` | Mario Kart 8 Deluxe prototype (Switch) | ELink2 29 | little | Shift-JIS |
+| `u-king` | The Legend of Zelda: Breath of the Wild (Wii U) | ELink2 30 | big | UTF-8 |
+| `u-king-s` | The Legend of Zelda: Breath of the Wild, Game Builder Garage (Switch) | ELink2 30 | little | UTF-8 |
+| `blitz` | Splatoon 2, ARMS, Mario Kart 8 Deluxe (Switch) | ELink2 30 | little | Shift-JIS |
+| `park` | Animal Crossing: New Horizons (Switch) | ELink2 31 | little | UTF-8 |
+| `thunder` | Splatoon 3 (Switch) | ELink2 34 | little | UTF-8 |
+| `ex-king` | The Legend of Zelda: Tears of the Kingdom (Switch), Splatoon Raiders (Switch 2) | ELink2 36 | little | UTF-8 |
+
+Sound presets:
+
+| Preset | Games | Version | Byte order | Encoding |
+|---|---|---|---|---|
+| `turbo` | Mario Kart 8 (Wii U) | SLink 69 | big | Shift-JIS |
+| `alice` | The Legend of Zelda: Tri Force Heroes (3DS) | SLink 69 | little | Shift-JIS |
+| `takumi` | Animal Crossing: Happy Home Designer (3DS) | SLink 73 | little | Shift-JIS |
+| `gambit` | Splatoon (Wii U) | SLink2 19 | big | Shift-JIS |
+| `turbo-s-proto` | Mario Kart 8 Deluxe prototype (Switch) | SLink2 27 | little | Shift-JIS |
+| `u-king` | The Legend of Zelda: Breath of the Wild (Wii U) | SLink2 28 | big | UTF-8 |
+| `u-king-s` | The Legend of Zelda: Breath of the Wild, Game Builder Garage (Switch) | SLink2 28 | little | UTF-8 |
+| `blitz` | Splatoon 2, ARMS, Mario Kart 8 Deluxe (Switch) | SLink2 28 | little | Shift-JIS |
+| `park` | Animal Crossing: New Horizons (Switch) | SLink2 29 | little | UTF-8 |
+| `thunder` | Splatoon 3 (Switch) | SLink2 31 | little | UTF-8 |
+| `ex-king` | The Legend of Zelda: Tears of the Kingdom (Switch) | SLink2 33 | little | UTF-8 |
+| `spiral` | Splatoon Raiders (Switch 2) | SLink2 34 | little | UTF-8 |
+
+The command line's `convert` takes a preset key, looked up among the presets
+of the database's own format.
 
 Choosing a version by hand takes the byte order and encoding of a preset
 using it (of several, the one sharing the database's byte order, then its
 encoding), or keeps the database's own when the version stays the same. Before writing,
 it lists what the chosen version cannot hold: version 19 stores no
 parameter defaults or local properties and finds users by name; 32-bit
-layouts have no grid containers; EffectLink 9 and SoundLink 69 have no
-shared pools or aliases, so those become copies. SoundLink 69 also stores
+layouts have no grid containers; ELink 9 and SLink 69 have no
+shared pools or aliases, so those become copies. SLink 69 also stores
 per-user distance settings and surround panning, which 73 has no place for.
 Going the other way the distances are written as 0, which Mario Kart 8
 replaces with its own defaults.
@@ -142,7 +163,7 @@ cannot see.
   they stand apart from the data.
 - **File > Export User as XML** writes one user together with every
   database-wide entry it points at. **Import User from XML** adds it to, or
-  replaces it in, any database of the same kind and system, reusing
+  replaces it in, any database of the same format, reusing
   identical entries that already exist. A user exported from another
   version is converted on import, and what that version could not carry is
   reported the way Save As reports it.
@@ -150,23 +171,22 @@ cannot see.
 ### Importing users from another database
 
 **File > Import Users from Database** (also on the user list's context menu)
-copies users from another database of the same link system: any XLink
-version into any other, EffectLink or SoundLink of either version, and
-between the two generations: EffectLink to and from an ELink2 database,
-SoundLink to and from an SLink2 database. Pick the users, and whether users
+copies users from another database of the same link system: any version
+of a format into any other, and between the two generations, ELink to and
+from ELink2 and SLink to and from SLink2. Pick the users, and whether users
 the database already has are replaced or left alone; everything lands as
 one undo step, and what has no place in the target is listed afterwards.
 
 Between generations the records are rebuilt, following how Mario Kart 8
 Deluxe ported Mario Kart 8's databases:
 
-- An EffectLink call table plays one of its effects: the one whose
+- An ELink call table plays one of its effects: the one whose
   conditions all match the three values the game passes, preferring the
   most conditions set. In XLink that becomes nested switch containers on
   three named properties, which the dialog asks for. They are guessed from
   the values both databases use: Mario Kart 8's conditions come out as
   GroundAttribute, WaterState and CourseID, as in Mario Kart 8 Deluxe.
-- A SoundLink call table marked random becomes a random container; one
+- A SLink call table marked random becomes a random container; one
   that is not plays its first asset. Volume, pitch, filter, pan and delay
   ranges become random parameters.
 - Effect and sound fields become the ELink2 and SLink2 parameters of the
@@ -224,7 +244,7 @@ ctest --test-dir build
 ```
 
 `bridge-check` imports every user of SOURCE into TARGET, writes and reads
-the result, and for an EffectLink or SoundLink source brings the users back
+the result, and for an ELink or SLink source brings the users back
 and compares what each call table picks for every combination of
 condition values, and every action's triggers. `XL_BRIDGES` runs it on
 TARGET|SOURCE pairs.
@@ -242,7 +262,8 @@ established, and the quirks shipped databases contain.
 ## Credits
 
 Layouts build on nnfck for version identification,
-[WoomLink](https://github.com/shadowninja108/WoomLink) and the xlink2 decompilation for the Splatoon 2 resource format,
+[WoomLink](https://github.com/shadowninja108/WoomLink) for the Splatoon 2 resource format, and
+[the xlink2 tool](https://github.com/dt-12345/xlink2) for Tears of the Kingdom,
 and were checked against the loaders in each game's executable.
 
 ## License
