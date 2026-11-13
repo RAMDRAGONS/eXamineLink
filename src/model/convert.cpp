@@ -374,7 +374,7 @@ namespace xl {
                         if (!(ct->i(from_call_flags) & 1) || s.row() < first || s.row() > last)
                             continue;
                         s64 total = 0;
-                        for (s64 k = first; k <= last && k < s.parent_list()->size(); ++k)
+                        for (s64 k = std::max<s64>(first, 0); k <= last && k < s.parent_list()->size(); ++k)
                             total += std::max<s64>(0, s.parent_list()->at(static_cast<int>(k)).i(from_weight));
                         o.set_i(random, 1);
                         if (total <= 0)
