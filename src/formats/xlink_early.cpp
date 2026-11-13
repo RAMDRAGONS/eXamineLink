@@ -257,11 +257,11 @@ namespace xl::xlink_early {
                     file.list(file::LocalPropertyEnumNames)
                         .append(std::make_unique<Node>(&S.name))
                         .set_s(name::Name, name(r.u32_at(tables)));
+                const auto t = r.slice(tables, 4 * u64 { n_direct }, "direct value table");
+                file.set_s(file::DirectValuePool, std::string(t.begin(), t.end()));
                 m_direct.resize(n_direct);
                 for (u32 k = 0; k < n_direct; ++k)
                     m_direct[k] = r.u32_at(tables + 4 * k);
-                const auto t = r.slice(tables, 4 * u64 { n_direct }, "direct value table");
-                file.set_s(file::DirectValuePool, std::string(t.begin(), t.end()));
                 tables += 4 * u64 { n_direct };
             }
 

@@ -491,13 +491,13 @@ namespace xl::xlink_modern {
 
             // Direct values come before the parameters that index them.
             u64 p = local + (u64 { n_local } + n_enum) * g.ptr();
-            m_direct.resize(n_direct);
-            for (u32 k = 0; k < n_direct; ++k)
-                m_direct[k] = r.u32_at(p + 4 * k);
             {
                 const auto t = r.slice(p, 4 * u64 { n_direct }, "direct value table");
                 file.set_s(file::DirectValuePool, std::string(t.begin(), t.end()));
             }
+            m_direct.resize(n_direct);
+            for (u32 k = 0; k < n_direct; ++k)
+                m_direct[k] = r.u32_at(p + 4 * k);
 
             const u64 asset_sets = align_up(pdt + r.u32_at(pdt), g.align());
             m_asset_sets_size
