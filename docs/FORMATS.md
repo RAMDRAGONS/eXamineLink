@@ -97,8 +97,9 @@ Raiders 1.1.0's loader and `solveUserBinAboutGlobalProperty_`, read
 unsigned; none of them reads the second. That one counts the distinct global properties the user reads:
 through global switch and blend-by containers, grid axes marked global
 (grid flag bits 0 and 1), curves in its assets' parameters, and its global
-properties. Every Tears of the Kingdom user matches that, but three
-Splatoon Raiders users do not (two of them have no calls at all), so
+properties. Every Tears of the Kingdom and Mario Kart World user matches
+that, but three Splatoon Raiders users (two of them have no calls at all)
+and three Nintendo Switch Sports Resort sound users do not, so
 eXamineLink keeps the stored count, sets it from the contents only when
 converting from a version without it, and validation notes a mismatch.
 `setupResourceParam_` finds local property names by binary search
@@ -285,4 +286,5 @@ nnfck also identifies XLink 21, ELink `BLNK` 32 and SLink 50. No databases of th
 verify against, so eXamineLink does not open them. XLink 27 to 36 other than
 27 to 31, 33, 34 and 36 open with the layout of their width and save as
 their own version. ELink2 36 pairs with SLink2 33 in Tears of the Kingdom
-and with SLink2 34 in Splatoon Raiders, which share one layout.
+and with SLink2 34 in Splatoon Raiders, Nintendo Switch Sports Resort and
+Mario Kart World, which share one layout.

@@ -91,8 +91,10 @@ const std::vector<Preset>& presets() {
       {"blitz", "Splatoon 2, ARMS, Mario Kart 8 Deluxe (Switch)", F::ELink2, 30, Little, Sjis},
       {"park", "Animal Crossing: New Horizons (Switch)", F::ELink2, 31, Little, Utf8},
       {"thunder", "Splatoon 3 (Switch)", F::ELink2, 34, Little, Utf8},
-      {"ex-king", "The Legend of Zelda: Tears of the Kingdom (Switch), Splatoon Raiders (Switch 2)", F::ELink2, 36,
-       Little, Utf8},
+      {"ex-king",
+       "The Legend of Zelda: Tears of the Kingdom (Switch), Splatoon Raiders, Nintendo Switch Sports Resort, Mario "
+       "Kart World (Switch 2)",
+       F::ELink2, 36, Little, Utf8},
       // Sounds.
       {"turbo", "Mario Kart 8 (Wii U)", F::SLink, 69, Big, Sjis},
       {"alice", "The Legend of Zelda: Tri Force Heroes (3DS)", F::SLink, 69, Little, Sjis},
@@ -106,7 +108,8 @@ const std::vector<Preset>& presets() {
       {"park", "Animal Crossing: New Horizons (Switch)", F::SLink2, 29, Little, Utf8},
       {"thunder", "Splatoon 3 (Switch)", F::SLink2, 31, Little, Utf8},
       {"ex-king", "The Legend of Zelda: Tears of the Kingdom (Switch)", F::SLink2, 33, Little, Utf8},
-      {"spiral", "Splatoon Raiders (Switch 2)", F::SLink2, 34, Little, Utf8},
+      {"spiral", "Splatoon Raiders, Nintendo Switch Sports Resort, Mario Kart World (Switch 2)", F::SLink2, 34, Little,
+       Utf8},
   };
   return p;
 }
