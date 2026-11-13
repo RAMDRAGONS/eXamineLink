@@ -953,12 +953,10 @@ void MainWindow::onLoadNames() {
 }
 
 void MainWindow::onAbout() {
-  QMessageBox::about(
-      this, tr("About eXamineLink"),
-      tr("<b>eXamineLink</b><br>Editor for Nintendo link databases: ELink2 and SLink2 (XLink versions 19 "
-         "to 36), ELink (9, 10) and SLink (69, 73).<br><br>"
-         "Layouts follow nnfck, WoomLink and the xlink2 tool, checked against the games' own "
-         "loaders.<br><br>MIT License."));
+  QMessageBox::about(this, tr("About eXamineLink"),
+                     tr("<h2>eXamineLink</h2><p>A Nintendo EPD XLink database editor</p>"
+                        "<p><a href=\"https://github.com/RAMDRAGONS/eXamineLink\">"
+                        "https://github.com/RAMDRAGONS/eXamineLink</a></p>"));
 }
 
 void MainWindow::sortIssues(int column) {
