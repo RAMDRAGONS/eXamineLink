@@ -1,0 +1,7 @@
+BasedOnStyle: WebKit
+ColumnLimit: 120
+QualifierAlignment: Left
+FixNamespaceComments: true
+NamespaceIndentation: All
+BreakBeforeBraces: Attach
+AllowShortEnumsOnASingleLine: true
