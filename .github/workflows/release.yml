@@ -70,8 +70,13 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      # Qt's deploy step rejects a relative prefix, and CMake on Windows wants
+      # the D:/ form of the path rather than Git Bash's /d/.
       - name: Install
-        run: cmake --install build --config Release --prefix "dist/$PACKAGE"
+        run: |
+          prefix="$PWD/dist/$PACKAGE"
+          if [ "$RUNNER_OS" = Windows ]; then prefix=$(cygpath -m "$prefix"); fi
+          cmake --install build --config Release --prefix "$prefix"
 
       - name: Copy license and readme
         run: cp LICENSE README.md "dist/$PACKAGE/"
