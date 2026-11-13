@@ -52,6 +52,10 @@ public:
       throw Error(std::string(what) + " at " + hex(at) + " (" + hex(len) + " bytes) runs past the end of the data (" +
                   hex(m_data.size()) + ")");
   }
+  Bytes slice(u64 at, u64 len, std::string_view what) const {
+    require(at, len, what);
+    return m_data.subspan(static_cast<std::size_t>(at), static_cast<std::size_t>(len));
+  }
 
   u8 u8_at(u64 at) const {
     require(at, 1, "byte");

@@ -44,7 +44,9 @@ private:
   void read_record(const RecordLayout& layout, Node& n, u64 at, u64 strings);
   void read_records(const RecordLayout& layout, NodeList& list, u64 at, u64 count, u64 strings);
   std::string region(u64 from, u64 to) const {
-    const auto t = r.data().subspan(from, to - from);
+    if (from > to)
+      throw Error("table at " + hex(from) + " ends before it starts");
+    const auto t = r.slice(from, to - from, "table");
     return std::string(t.begin(), t.end());
   }
   void read_eflk9(Node& file);

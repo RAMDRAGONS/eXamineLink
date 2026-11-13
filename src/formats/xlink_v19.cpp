@@ -175,9 +175,9 @@ Document V19Reader::run() {
   if (m_names > end || m_conditions > m_names)
     throw Error("XLink table positions are out of order");
   {
-    const auto t = r.data().subspan(m_names, end - m_names);
+    const auto t = r.slice(m_names, end - m_names, "name table");
     file.set_s(file::NameTablePool, std::string(t.begin(), t.end()));
-    const auto c = r.data().subspan(m_conditions, m_names - m_conditions);
+    const auto c = r.slice(m_conditions, m_names - m_conditions, "condition table");
     file.set_s(file::ConditionPool, std::string(c.begin(), c.end()));
   }
 
@@ -249,7 +249,7 @@ Document V19Reader::run() {
     for (u32 k = 0; k < n_up; ++k, q += 8)
       u.list(user::UserParams).append(make_param(q, static_cast<int>(k)));
     {
-      const auto t = r.data().subspan(q, 2 * u64{n_call});
+      const auto t = r.slice(q, 2 * u64{n_call}, "sorted call order");
       u.set_s(user::SortedCallOrder, std::string(t.begin(), t.end()));
     }
     q += 2 * u64{n_call} + (n_call & 1 ? 2 : 0);
@@ -525,6 +525,8 @@ void V19Writer::param(const Node* p, const Node* def, s64 index) {
 u32 V19Writer::condition_offset(s64 index) {
   if (const auto it = m_cond_offsets.find(index); it != m_cond_offsets.end())
     return it->second;
+  if (index >= file.list(file::Conditions).size())
+    throw Error("condition " + std::to_string(index) + " does not exist");
   const Node& c = file.list(file::Conditions).at(static_cast<int>(index));
   Writer b(d.endian);
   const s64 type = c.i(cond::ParentType);

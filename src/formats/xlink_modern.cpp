@@ -162,7 +162,7 @@ void ModernReader::read_pdt(Node& file, u64 pdt) {
   const u64 strings = defs + total * g.def_size();
   if (strings > pdt + size)
     throw Error("parameter definitions overrun their table");
-  const auto bytes = r.data().subspan(strings, pdt + size - strings);
+  const auto bytes = r.slice(strings, pdt + size - strings, "parameter definition names");
   file.set_s(file::PdtStringPool, std::string(bytes.begin(), bytes.end()));
   const int lists[3] = {file::UserParamDefs, file::AssetParamDefs, file::TriggerParamDefs};
   u64 at = defs;
@@ -333,7 +333,7 @@ void ModernReader::read_user(Node& file, Node& user, u64 at, u32 user_params) {
   for (u32 k = 0; k < user_params; ++k, p += 4)
     user.list(user::UserParams).append(make_param(r.u32_at(p), static_cast<int>(k)));
   {
-    const auto t = r.data().subspan(p, 2 * u64{n_call});
+    const auto t = r.slice(p, 2 * u64{n_call}, "sorted call order");
     user.set_s(user::SortedCallOrder, std::string(t.begin(), t.end()));
   }
   p += 2 * u64{n_call} + (n_call & 1 ? 2 : 0);
@@ -485,7 +485,7 @@ Document ModernReader::run() {
   if (m_names > end || conditions > m_names)
     throw Error("XLink table positions are out of order");
   {
-    const auto t = r.data().subspan(m_names, end - m_names);
+    const auto t = r.slice(m_names, end - m_names, "name table");
     file.set_s(file::NameTablePool, std::string(t.begin(), t.end()));
   }
 
@@ -511,7 +511,7 @@ Document ModernReader::run() {
   for (u32 k = 0; k < n_direct; ++k)
     m_direct[k] = r.u32_at(p + 4 * k);
   {
-    const auto t = r.data().subspan(p, 4 * u64{n_direct});
+    const auto t = r.slice(p, 4 * u64{n_direct}, "direct value table");
     file.set_s(file::DirectValuePool, std::string(t.begin(), t.end()));
   }
 
