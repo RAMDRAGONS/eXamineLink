@@ -1,0 +1,120 @@
+# Pushing a tag such as v1.0.0 builds Windows and Linux archives and publishes
+# them as a GitHub release; running the workflow by hand only builds them.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: '6.8.3'
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-2022
+            qt_arch: win64_msvc2022_64
+            generator: Visual Studio 17 2022
+          # The oldest supported runner, so the binaries need only an older glibc.
+          - name: linux-x64
+            os: ubuntu-22.04
+            qt_arch: linux_gcc_64
+            generator: Ninja
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Name the build
+        run: |
+          project_version=$(sed -n 's/^project(eXamineLink VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "$GITHUB_REF_NAME" != "v$project_version" ] && [[ "$GITHUB_REF_NAME" != "v$project_version-"* ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match the project version $project_version in CMakeLists.txt"
+              exit 1
+            fi
+            version=$GITHUB_REF_NAME
+          else
+            version=v$project_version-${GITHUB_SHA::7}
+          fi
+          echo "PACKAGE=eXamineLink-$version-${{ matrix.name }}" >> "$GITHUB_ENV"
+
+      - name: Install build tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build patchelf libgl1-mesa-dev libxkbcommon-dev
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ matrix.qt_arch }}
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DXL_DEPLOY_QT=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Install
+        run: cmake --install build --config Release --prefix "dist/$PACKAGE"
+
+      - name: Copy license and readme
+        run: cp LICENSE README.md "dist/$PACKAGE/"
+
+      # Runs the bundled command-line tool, which fails to start if the
+      # deployed Qt libraries are missing or unresolvable.
+      - name: Check the bundle starts
+        run: '"dist/$PACKAGE/bin/examinelink-cli" presets'
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        working-directory: dist
+        run: 7z a -tzip "$PACKAGE.zip" "$PACKAGE"
+
+      # tar keeps the executable bits and library symlinks a zip would lose.
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        working-directory: dist
+        run: tar -czf "$PACKAGE.tar.gz" "$PACKAGE"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: packages/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
