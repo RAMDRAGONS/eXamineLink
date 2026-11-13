@@ -1,7 +1,55 @@
-BasedOnStyle: WebKit
+BasedOnStyle: LLVM
+
+AlignAfterOpenBracket: Align
+AlignConsecutiveMacros: Consecutive
+
+AllowAllArgumentsOnNextLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+
+AlwaysBreakAfterReturnType: TopLevelDefinitions
+
+BraceWrapping:
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterFunction: true
+  AfterStruct: false
+  BeforeElse: false
+  SplitEmptyFunction: true
+
+BinPackArguments: true
+BinPackParameters: BinPack
+
+BreakBeforeBraces: Custom
+
 ColumnLimit: 120
-QualifierAlignment: Left
-FixNamespaceComments: true
+PenaltyBreakBeforeFirstCallParameter: 1
+PenaltyExcessCharacter: 100
+
+ContinuationIndentWidth: 3
+IndentWidth: 3
+AccessModifierOffset: -3
+UseTab: Never
+
+Cpp11BracedListStyle: true
+
+SpaceAfterCStyleCast: false
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: false
+SpacesInContainerLiterals: false
+
+PointerAlignment: Right
+
+IncludeBlocks: Preserve
+IncludeCategories:
+  - Regex: "<[[:alnum:].]+>"
+    Priority: 1
+  - Regex: '.*\/.*'
+    Priority: 2
+  - Regex: ".*"
+    Priority: 3
+
+---
+Language: CSharp
 NamespaceIndentation: All
-BreakBeforeBraces: Attach
-AllowShortEnumsOnASingleLine: true
+...
